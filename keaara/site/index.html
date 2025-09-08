@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מסעדה ביתית – דף נחיתה</title>
+    <meta name="theme-color" content="#000000">
+    <!-- SEO and Social -->
+    <meta id="metaDescription" name="description" content="מסעדה ביתית עם תפריט טרי, סלטים בהרכבה אישית, מנות טאבון, סמבוסק ומשקאות. גלריה, טופס קשר ויצירת קשר מהירה בוואטסאפ. מותאם עברית וערבית.">
+    <meta property="og:type" content="website">
+    <meta property="og:title" id="metaOgTitle" content="Salad is not a meal, it's a lifestyle">
+    <meta property="og:description" id="metaOgDesc" content="Salad is not a meal, it's a lifestyle">
+    <meta property="og:image" content="https://i.ibb.co/B2KmRPzx/a206104fbd8c.jpg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" id="metaTwTitle" content="Salad is not a meal, it's a lifestyle">
+    <meta name="twitter:description" id="metaTwDesc" content="Salad is not a meal, it's a lifestyle">
+
+    <!-- Performance: fonts and hero image -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="image" href="https://i.ibb.co/B2KmRPzx/a206104fbd8c.jpg">
+
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Skip to content (accessibility) -->
+    <a href="#menu" class="skip-link" data-i18n="skip.content">דלג לתוכן</a>
+
+
+    <!-- Floating language switch at top -->
+    <div class="lang-floating" aria-label="Language switcher">
+        <button class="lang-btn" data-lang="he" aria-label="Hebrew">עברית</button>
+        <button class="lang-btn" data-lang="ar" aria-label="Arabic">العربية</button>
+        <button class="lang-btn" data-lang="en" aria-label="English">English</button>
+    </div>
+
+    <!-- Social media quick contact icons -->
+    <div class="social-icons">
+        <!-- HAT app icon -->
+        <a id="hatButton" href="https://haat.onelink.me/3ap7/zhfxheax" target="_blank" rel="noopener" aria-label="HAT App">
+            <img src="https://play-lh.googleusercontent.com/zx0jYiSSG6je0_FNVVEy951oqAjDMkyqjlV0wFbX8E3Yl9Tts6sMgwRX7TF6EvR9_Z8S=w480-h960-rw" alt="HAT App Icon - Image 1" style="width: 48px; height: 48px; border-radius: 12px;">
+        </a>
+        <a id="callButton" href="tel:048641967" aria-label="Call">
+            <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6.62 10.79a15.05 15.05 0 006.59 6.59l1.82-1.82a1 1 0 011.03-.24 11.36 11.36 0 003.56.57 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.11a1 1 0 011 1 11.36 11.36 0 00.57 3.56 1 1 0 01-.24 1.03l-1.82 1.82z"/>
+            </svg>
+        </a>
+        <!-- Waze icon -->
+        <a id="wazeButton" href="https://waze.com/ul/hsvbfsqjux" target="_blank" rel="noopener" aria-label="Waze">
+            <img src="https://i.ibb.co/nqcjrbC0/7b17c5228ef2.png" alt="Waze Icon" style="width: 100%; height: 100%; border-radius: 12px; object-fit: cover;">
+        </a>
+        <!-- Instagram icon -->
+        <a href="https://www.instagram.com/h_kearaa?igsh=MTNwN2l2YmJpNXF5eg==" target="_blank" rel="noopener" aria-label="Instagram">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 0C5.829 0 5.556.01 4.703.048 3.85.088 3.269.222 2.76.42a3.9 3.9 0 0 0-1.417.923A3.9 3.9 0 0 0 .42 2.76C.222 3.268.087 3.85.048 4.7.01 5.555 0 5.827 0 8.001c0 2.172.01 2.444.048 3.297.04.852.174 1.433.372 1.942.205.526.478.972.923 1.417.444.445.89.719 1.416.923.51.198 1.09.333 1.942.372C5.555 15.99 5.827 16 8 16s2.444-.01 3.298-.048c.851-.04 1.434-.174 1.943-.372a3.9 3.9 0 0 0 1.416-.923c.445-.445.718-.891.923-1.417.197-.509.332-1.09.372-1.942C15.99 10.445 16 10.173 16 8s-.01-2.445-.048-3.299c-.04-.851-.175-1.433-.372-1.941a3.9 3.9 0 0 0-.923-1.417A3.9 3.9 0 0 0 13.24.42c-.51-.198-1.092-.333-1.943-.372C10.443.01 10.172 0 7.998 0zm-.717 1.442h.718c2.136 0 2.389.007 3.232.046.78.035 1.204.166 1.486.275.373.145.64.319.92.599s.453.546.598.92c.11.281.24.705.275 1.485.039.843.047 1.096.047 3.231s-.008 2.389-.047 3.232c-.035.78-.166 1.203-.275 1.485a2.5 2.5 0 0 1-.599.919c-.28.28-.546.453-.92.598-.28.11-.704.24-1.485.276-.843.038-1.096.047-3.232.047s-2.39-.009-3.233-.047c-.78-.036-1.203-.166-1.485-.276a2.5 2.5 0 0 1-.92-.598 2.5 2.5 0 0 1-.6-.92c-.109-.281-.24-.705-.275-1.485-.38-.843-.046-1.096-.046-3.233s.008-2.388.046-3.231c.036-.78.166-1.204.276-1.486.145-.373.319-.640.599-.920s.546-.453.92-.598c.282-.11.705-.24 1.485-.276.738-.034 1.024-.044 2.515-.045zm4.988 1.328a.96.96 0 1 0 0 1.92.96.96 0 0 0 0-1.92m-4.27 1.122a4.109 4.109 0 1 0 0 8.217 4.109 4.109 0 0 0 0-8.217m0 1.441a2.667 2.667 0 1 1 0 5.334 2.667 2.667 0 0 1 0-5.334"/>
+            </svg>
+        </a>
+    </div>
+    <!-- Hero section with background image -->
+    <header class="hero">
+        <div class="overlay">
+            <div class="cta-group">
+                <a href="#menu" class="btn primary" data-i18n="cta.menu">לתפריט</a>
+                <a href="#contact" class="btn ghost" data-i18n="cta.contact">צור קשר</a>
+            </div>
+            <p class="hero-tagline" data-i18n="hero.tagline">Salad is not a meal, it's a lifestyle</p>
+        </div>
+    </header>
+
+    <!-- Sticky navigation bar for section anchors with logo -->
+    <nav class="main-nav" aria-label="Main navigation">
+        <div class="nav-content">
+            <button id="menuToggle" class="menu-toggle" aria-label="פתח תפריט" aria-expanded="false" aria-controls="navList">
+                <span></span><span></span><span></span>
+            </button>
+            <ul id="navList">
+                <li><a href="#menu" data-i18n="nav.menu">תפריט</a></li>
+                <li><a href="#about" data-i18n="nav.about">אודות</a></li>
+                <li><a href="#services" data-i18n="nav.services">שירותים</a></li>
+                <li><a href="#gallery" data-i18n="nav.gallery">גלריה</a></li>
+                <li><a href="#contact" data-i18n="nav.contact">צור קשר</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main>
+        <!-- USP Section -->
+        <section id="usp" class="section reveal usp-section">
+            <h2 data-i18n="usp.title">למה לבחור בנו</h2>
+            <div class="usp-grid">
+                <div class="usp-card">
+                    <div class="usp-emoji" aria-hidden="true">🥗</div>
+                    <h3 data-i18n="usp.fresh.title">טרי מהשוק</h3>
+                    <p data-i18n="usp.fresh.desc">חומרי גלם יומיומיים ועונתיים שנחתכים ומוכנים במקום.</p>
+                </div>
+                <div class="usp-card">
+                    <div class="usp-emoji" aria-hidden="true">⚡</div>
+                    <h3 data-i18n="usp.fast.title">מהיר וידידותי</h3>
+                    <p data-i18n="usp.fast.desc">הזמנה קלה ושירות מחויך – גם בישיבה וגם בטייק־אווי.</p>
+                </div>
+                <div class="usp-card">
+                    <div class="usp-emoji" aria-hidden="true">🌿</div>
+                    <h3 data-i18n="usp.kosher.title">בריא ומאוזן</h3>
+                    <p data-i18n="usp.kosher.desc">אפשרויות צמחוניות וטבעוניות עם איזון נכון של טעמים.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Menu Section -->
+        <section id="menu" class="section reveal">
+            <h2 data-i18n="menu.title">התפריט שלנו</h2>
+            <p data-i18n="menu.desc">חפשו מנות, עיינו בקטגוריות וגלו את כל הטעמים שלנו.</p>
+            <div class="search-section">
+                <input type="text" id="searchInput" placeholder="חיפוש מנה..." data-i18n-placeholder="search.placeholder">
+            </div>
+            <section id="searchResults" class="hidden"></section>
+            <div class="categories-wrapper">
+                <div class="category">
+                    <h3><span data-i18n="cat.breakfast">ארוחות בוקר</span></h3>
+                    <ul>
+                        <li><span data-i18n="item.pancakes">פנקייקים עם דבש</span></li>
+                        <li><span data-i18n="item.omelette">חביתה ירקות טרייה</span></li>
+                        <li><span data-i18n="item.shakshuka">שקשוקה ביתית</span></li>
+                    </ul>
+                </div>
+                <div class="category">
+                    <h3><span data-i18n="cat.salads">סלטים בהרכבה אישית</span></h3>
+                    <ul>
+                        <li><span data-i18n="item.caesar">סלט קיסר עם רוטב לימון</span></li>
+                        <li><span data-i18n="item.greek">סלט יווני עם גבינה בולגרית</span></li>
+                        <li><span data-i18n="item.green">סלט ירוק עם אגוזים ורימונים</span></li>
+                    </ul>
+                </div>
+                <div class="category">
+                    <h3><span data-i18n="cat.taboon">מהטאבון</span></h3>
+                    <ul>
+                        <li><span data-i18n="item.pizza">פיצה מרגריטה בטאבון</span></li>
+                        <li><span data-i18n="item.zaatar">מאפה זעתר מסורתי</span></li>
+                        <li><span data-i18n="item.focaccia">פוקאצ׳ה עם שמן זית ורוזמרין</span></li>
+                    </ul>
+                </div>
+                <div class="category">
+                    <h3><span data-i18n="cat.sambusak">סמבוסק אישי</span></h3>
+                    <ul>
+                        <li><span data-i18n="item.samb_cheese">סמבוסק גבינות וזיתים</span></li>
+                        <li><span data-i18n="item.samb_spinach">סמבוסק תרד ופטריות</span></li>
+                        <li><span data-i18n="item.samb_potato">סמבוסק תפוחי אדמה</span></li>
+                    </ul>
+                </div>
+                <div class="category">
+                    <h3><span data-i18n="cat.drinks">משקאות</span></h3>
+                    <ul>
+                        <li><span data-i18n="item.latte">קפה הפוך</span></li>
+                        <li><span data-i18n="item.mint_tea">תה עם נענע</span></li>
+                        <li><span data-i18n="item.orange_juice">מיץ תפוזים טרי</span></li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- About Section -->
+        <section id="about" class="section light-bg reveal">
+            <h2 data-i18n="about.title">אודותינו</h2>
+            <div class="about-content">
+                <div class="about-text">
+                    <p data-i18n="about.p1">
+                        המסעדה הביתית שלנו נולדה מתוך אהבה גדולה לבישול ביתי ומסורות משפחתיות. בשנת 2005 החליט מייסד
+                        המסעדה, שף Jol Rhayel, לפתוח מקום שיזכיר לכל אחד ואחת את הטעמים של בית אמא. Jol גדל בבית שבו
+                        סירי המרק תמיד היו על האש והריחות נעו בין מאפים חמים לקפה טרי. לאחר שנים רבות בתחום הקולינריה,
+                        הוא החליט להחזיר את הבישול הפשוט והטעים למרכז הבמה.
+                    </p>
+                    <p data-i18n="about.p2">
+                        אנו מתמחים במאכלים ביתיים עם טוויסט מודרני. מקפידים להשתמש בחומרי גלם טריים מהשוק המקומי ומבשלים
+                        ללא קיצורי דרך, בדיוק כפי שעשו הסבתות שלנו. מעבר למטבח, המשימה שלנו היא ליצור תחושה של חמימות,
+                        ביתיות ונוחות לכל מי שנכנס בדלת. מהרגע שתשבו לשולחן תרגישו שאתם חלק ממשפחה גדולה ומתוקה.
+                    </p>
+                </div>
+                <figure class="founder-figure">
+                    <img src="https://i.ibb.co/7dLwJB7j/c5b8e8a832df.jpg" alt="דיוקן המייסד - Image 4" class="founder-img" loading="lazy" decoding="async">
+                    <figcaption data-i18n="founder.caption">המייסד שלנו, שף Jol Rhayel</figcaption>
+                </figure>
+            </div>
+        </section>
+
+        <!-- Services Section -->
+        <section id="services" class="section reveal">
+            <h2 data-i18n="services.title">אז מה הופך את “הקערה” למובילה?</h2>
+            <div class="services-content">
+                <div class="services-text">
+                    <ul class="services-list">
+                        <li data-i18n="services.bullets.1">✅ קונספט פורץ דרך: המסעדה הראשונה בישראל שהתמחתה בהרכבת סלטים אישיים.</li>
+                        <li data-i18n="services.bullets.2">✅ חומרי גלם איכותיים: שימוש בחומרי גלם מקומיים, טריים ובריאים.</li>
+                        <li data-i18n="services.bullets.3">✅ גמישות והתאמה אישית: כל אחד יכול ליצור את הקערה שמתאימה לו – טבעונית, חלבונית, קטוגנית ועוד.</li>
+                        <li data-i18n="services.bullets.4">✅ טרנד שהפך לקלאסיקה: מאז הקמתה, מסעדות רבות אימצו את הקונספט – אבל “הקערה” הייתה שם קודם!</li>
+                    </ul>
+                    <h3 data-i18n="services.next_title">מה הלאה? החדשנות ממשיכה!</h3>
+                    <p data-i18n="services.future">בימים אלו “הקערה” מתכננת להרחיב את התפריט, עם קערות עונתיות, שילובי סופר-פוד חדשים, ורטבים מפתיעים. כמו כן, בקרוב יושק מועדון הלקוחות החדש, שיאפשר לחובבי הבריאות ליהנות מהטבות בלעדיות.</p>
+                    <p data-i18n="services.slogan">הקערה – יותר מסלט. חוויה בריאה, טעימה ואישית.</p>
+                </div>
+                <div class="laundry-image-wrapper">
+                    <img src="https://i.ibb.co/4wRSCCr4/837ca3666bef.jpg" alt="סלט טרי - Image 5" loading="lazy" decoding="async">
+                </div>
+            </div>
+        </section>
+
+        <!-- CTA Banner -->
+        <section id="ctaBanner" class="section reveal cta-banner">
+            <div class="cta-banner-inner">
+                <h2 data-i18n="cta.banner.title">מתחשק לכם משהו טרי?</h2>
+                <p data-i18n="cta.banner.desc">הרכיבו את הסלט המושלם והזמינו בקלות — אנחנו כבר מתחילים להכין.</p>
+                <a class="btn green" href="https://haat.onelink.me/3ap7/zhfxheax" target="_blank" rel="noopener" data-i18n="cta.banner.button">להזמנה מהירה</a>
+            </div>
+        </section>
+
+        <!-- Gallery Section -->
+        <section id="gallery" class="section light-bg reveal">
+            <h2 data-i18n="gallery.title">גלריה</h2>
+            <p data-i18n="gallery.desc">קצת מהאווירה והטעמים שלנו כדי שתוכלו להרגיש בבית עוד לפני שאתם מגיעים.</p>
+            <div class="gallery-grid">
+                <img src="https://i.ibb.co/CpSVVGFy/9b82230c0ddc.jpg" alt="תמונה 1" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/XryMYSyP/c864c635d466.jpg" alt="תמונה 2" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/FL3cht30/7f8a30cd0281.jpg" alt="תמונה 3" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/PzhgrSnY/9631c5f19786.jpg" alt="תמונה 4" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/8Wk5ssD/bc15f9dbb4fb.jpg" alt="תמונה 5" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/Z6N5QTJ8/a4203341a8c7.jpg" alt="תמונה 6" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/LhhrBNGz/131b29b6cdbb.jpg" alt="תמונה 7" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/G3nPzZjK/bdd417e05ff9.jpg" alt="תמונה 8" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/pqQcNFN/b1757473f33c.jpg" alt="תמונה 9" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/ymBfh5nm/a567484b86c8.jpg" alt="תמונה 10" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/tpNDN7Pg/d9f69ea030f8.jpg" alt="תמונה 11" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/mrSktQCx/bddf1a64f249.jpg" alt="תמונה 12" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/7dF7vqJ6/7b7f64da822d.jpg" alt="תמונה 13" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/G3P8TgvW/d38446f58bfc.jpg" alt="תמונה 14" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/LdLnk7Sw/b24a9f922abe.jpg" alt="תמונה 16" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/TMDpvsVp/5996d7cb4717.jpg" alt="תמונה 17" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/d0hSm3TR/4be46a66cc73.jpg" alt="תמונה 18" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/FLDPTMTW/e8475c05a8ab.jpg" alt="תמונה 19" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/Z1FxTrQg/df60637b44df.jpg" alt="תמונה 20" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/0yVZjXDx/1d5586bc180f.jpg" alt="תמונה 21" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/Y48m3FSt/49c16c4bc1aa.jpg" alt="תמונה 22" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/99t99cRq/71990f673d9e.jpg" alt="תמונה 23" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/wFHsCWFT/72e7131d8d50.jpg" alt="תמונה 24" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/FLCmz8mx/e804fd99ae56.jpg" alt="תמונה 25" loading="lazy" decoding="async">
+                <img src="https://i.ibb.co/h1t23DR5/086af007810e.jpg" alt="תמונה 26" loading="lazy" decoding="async">
+            </div>
+        </section>
+
+        <!-- Image Modal for Gallery -->
+        <div id="imageModal" class="modal" aria-hidden="true" role="dialog" aria-label="תמונה מוגדלת">
+            <span class="close" aria-label="סגור">&times;</span>
+            <button class="nav-btn nav-prev" aria-label="תמונה קודמת" data-i18n-aria="gallery.prev">&#10094;</button>
+            <button class="nav-btn nav-next" aria-label="תמונה הבאה" data-i18n-aria="gallery.next">&#10095;</button>
+            <img class="modal-content" id="modalImg" alt="">
+        </div>
+
+        <!-- Contact Section -->
+        <section id="contact" class="section reveal">
+            <h2 data-i18n="contact.title">צור קשר</h2>
+            <p data-i18n="contact.desc">נשמח לשמוע מכם! מלאו את הטופס ונחזור אליכם בהקדם.</p>
+            <div class="contact-container">
+                <form id="contactForm" class="contact-form">
+                    <label for="contactName" data-i18n="contact.name_label">שם מלא</label>
+                    <input type="text" id="contactName" required>
+
+                    <label for="contactPhone" data-i18n="contact.phone_label">טלפון</label>
+                    <input type="tel" id="contactPhone" required placeholder="050-0000000" data-i18n-placeholder="contact.phone_placeholder">
+
+                    <label for="contactEmail" data-i18n="contact.email_label">דוא"ל</label>
+                    <input type="email" id="contactEmail" required placeholder="example@email.com" data-i18n-placeholder="contact.email_placeholder">
+
+                    <label for="contactMessage" data-i18n="contact.message_label">הודעה</label>
+                    <textarea id="contactMessage" rows="4" required></textarea>
+
+                    <button type="submit" class="btn primary full" data-i18n="contact.submit">שלח הודעה</button>
+                </form>
+                <div id="contactMessageStatus" class="form-message"></div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <span data-i18n="footer.text">© 2025 מסעדה ביתית – כל הזכויות שמורות</span>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

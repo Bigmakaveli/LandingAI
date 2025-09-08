@@ -1,0 +1,122 @@
+[
+  {
+    "role": "user",
+    "content": "move the 15th image from the gallery and put it instead of the image in the אז מה הופך את “הקערה” למובילה? section",
+    "timestamp": "2025-09-07T16:34:10.231Z"
+  },
+  {
+    "role": "assistant",
+    "content": "✅ Your changes have been saved! \n\n You can now use the undo/redo buttons to navigate through your changes, or click publish to make them live on your website.",
+    "timestamp": "2025-09-07T16:35:16.981Z"
+  },
+  {
+    "role": "user",
+    "content": "can you embed videos from instagram ?",
+    "timestamp": "2025-09-07T20:43:41.204Z"
+  },
+  {
+    "role": "assistant",
+    "content": "Yes—Instagram videos can be embedded; share the post URL and I’ll add it to your page.",
+    "timestamp": "2025-09-07T20:44:03.276Z"
+  },
+  {
+    "role": "user",
+    "content": "embed this IG video https://www.instagram.com/reel/C7l9CVcN-nu/?igsh=MWE1bHhsMTRydWg3NQ==",
+    "timestamp": "2025-09-07T20:56:50.862Z"
+  },
+  {
+    "role": "assistant",
+    "content": "✅ Your changes have been saved! \n\n You can now use the undo/redo buttons to navigate through your changes, or click publish to make them live on your website.",
+    "timestamp": "2025-09-07T20:57:50.355Z"
+  },
+  {
+    "role": "user",
+    "content": "hi",
+    "timestamp": "2025-09-08T10:11:06.182Z"
+  },
+  {
+    "role": "assistant",
+    "content": "Hi! How can I help you with your site today?",
+    "timestamp": "2025-09-08T10:11:18.525Z"
+  },
+  {
+    "role": "user",
+    "content": "hi",
+    "timestamp": "2025-09-08T10:53:47.395Z"
+  },
+  {
+    "role": "assistant",
+    "content": "Hi! How can I help with your website today?",
+    "timestamp": "2025-09-08T10:53:57.416Z"
+  },
+  {
+    "role": "user",
+    "content": "hi",
+    "timestamp": "2025-09-08T10:54:26.982Z"
+  },
+  {
+    "role": "assistant",
+    "content": "Hi! How can I help you with your site today?",
+    "timestamp": "2025-09-08T10:54:43.602Z"
+  },
+  {
+    "role": "user",
+    "content": "Add a green button at the top of the site",
+    "timestamp": "2025-09-08T10:57:55.059Z"
+  },
+  {
+    "role": "assistant",
+    "content": "✅ Your changes have been saved! \n\n You can now use the undo/redo buttons to navigate through your changes, or click publish to make them live on your website.",
+    "timestamp": "2025-09-08T10:58:46.484Z"
+  },
+  {
+    "role": "user",
+    "content": "Remove the green WhatsApp at the top of the page",
+    "timestamp": "2025-09-08T10:59:27.882Z"
+  },
+  {
+    "role": "assistant",
+    "content": "✅ Your changes have been saved! \n\n You can now use the undo/redo buttons to navigate through your changes, or click publish to make them live on your website.",
+    "timestamp": "2025-09-08T10:59:59.701Z"
+  },
+  {
+    "role": "user",
+    "content": "hi",
+    "timestamp": "2025-09-08T11:07:54.526Z"
+  },
+  {
+    "role": "assistant",
+    "content": "Hi! How can I help you with your website today?",
+    "timestamp": "2025-09-08T11:08:07.546Z"
+  },
+  {
+    "role": "user",
+    "content": "Hi\n",
+    "timestamp": "2025-09-08T11:34:33.098Z"
+  },
+  {
+    "role": "assistant",
+    "content": "Hi! How can I help you with your website today?",
+    "timestamp": "2025-09-08T11:34:46.060Z"
+  },
+  {
+    "role": "user",
+    "content": "Hola amigos",
+    "timestamp": "2025-09-08T11:35:13.455Z"
+  },
+  {
+    "role": "assistant",
+    "content": "¡Hola, amigos! ¿En qué puedo ayudarles hoy?",
+    "timestamp": "2025-09-08T11:35:31.801Z"
+  },
+  {
+    "role": "user",
+    "content": "hi",
+    "timestamp": "2025-09-08T11:39:18.522Z"
+  },
+  {
+    "role": "assistant",
+    "content": "Hi! How can I help you with your site today?",
+    "timestamp": "2025-09-08T11:39:33.480Z"
+  }
+]
