@@ -1,0 +1,15 @@
+{
+  "name": "landingai",
+  "private": true,
+  "version": "0.0.0",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n frontend,backend -c green,blue \"npm run dev --workspace @landing/frontend\" \"npm run dev --workspace @landing/backend\"",
+    "build": "npm run build --workspace @landing/frontend && npm run build --workspace @landing/backend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  }
+}
