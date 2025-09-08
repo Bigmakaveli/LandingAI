@@ -182,8 +182,9 @@ async function callAIder(siteId: string, userMessage: string): Promise<{ success
       throw new Error(`Site directory does not exist: ${siteDir}`);
     }
     
-    // Get the path to the aider_runner.py script
-    const aiderScriptPath = path.resolve(process.cwd(), 'python/aider_runner.py');
+    // Get the path to the aider_runner.py script (relative to project root)
+    const projectRoot = path.resolve(process.cwd(), '../../');
+    const aiderScriptPath = path.resolve(projectRoot, 'apps/backend/python/aider_runner.py');
     
     // Check if the Python script exists
     const scriptExists = await fs.stat(aiderScriptPath).then(() => true).catch(() => false);
@@ -191,8 +192,8 @@ async function callAIder(siteId: string, userMessage: string): Promise<{ success
       throw new Error(`Aider script not found: ${aiderScriptPath}`);
     }
     
-    // Use system Python (python3) instead of virtual environment
-    const pythonCommand = 'python3';
+    // Use the virtual environment Python (relative to project root)
+    const pythonCommand = path.resolve(projectRoot, 'apps/backend/python/venv/bin/python');
     
     // Check if Python is available
     try {
@@ -238,10 +239,12 @@ async function callAIder(siteId: string, userMessage: string): Promise<{ success
     
     console.log(`[Aider] Executing: ${pythonCommand} ${args.join(' ')}`);
     
-    // Spawn the Python process using system Python
+    // Spawn the Python process from the project root directory
     return new Promise((resolve, reject) => {
+      const projectRoot = path.resolve(process.cwd(), '../../');
       const pythonProcess = spawn(pythonCommand, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
+        cwd: projectRoot, // Run from project root to avoid Git directory confusion
         env: {
           ...process.env,
           OPENAI_API_KEY: OPENAI_CONFIG.API_KEY

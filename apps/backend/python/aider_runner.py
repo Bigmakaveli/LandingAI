@@ -208,58 +208,50 @@ def run_aider_on_folder(folder_path: str, system_message: str, user_message: str
                 "fileChanged": False
             }
         
-        # Change to the folder directory
-        original_cwd = os.getcwd()
-        os.chdir(folder_path)
+        # Don't change directory - stay in the original working directory
+        # This prevents Aider from getting confused about Git working directory
         
-        try:
-            # Build the complete message combining system and user messages
-            full_message = f"System: {system_message}\n\nUser: {user_message}"
-            
-            # Build arguments for aider
-            argv = [
-                "--model", "gpt-5",
-                "--message", full_message,
-                "--yes",
-                "--no-pretty",
-                "--no-detect-urls"
-            ]
-            
-            # Add all web files to the context
-            for file_path in web_files:
-                # Convert to relative path from the folder
-                relative_path = os.path.relpath(file_path, folder_path)
-                argv.extend(["--file", relative_path])
-            
-            # Get the commit hash before running Aider
-            before_commit = get_git_head_commit(folder_path)
-            
-            # Capture Aider output by redirecting stdout
-            import io
-            import contextlib
-            
-            output_capture = io.StringIO()
-            with contextlib.redirect_stdout(output_capture):
-                # Run aider
-                aider_main(argv)
-            
-            # Get the captured output
-            aider_output = output_capture.getvalue()
-            
-            # Analyze Git commits to determine if files were changed
-            file_changed = analyze_aider_output(folder_path, before_commit)
-            
-            # Create user-friendly output
-            user_output = create_user_output(aider_output, file_changed)
-            
-            return {
-                "userOutput": user_output,
-                "fileChanged": file_changed
-            }
-            
-        finally:
-            # Restore original working directory
-            os.chdir(original_cwd)
+        # Build the complete message combining system and user messages
+        full_message = f"System: {system_message}\n\nUser: {user_message}"
+        
+        # Build arguments for aider
+        argv = [
+            "--model", "gpt-5",
+            "--message", full_message,
+            "--yes",
+            "--no-pretty",
+            "--no-detect-urls"
+        ]
+        
+        # Add all web files to the context with absolute paths
+        for file_path in web_files:
+            argv.extend(["--file", file_path])
+        
+        # Get the commit hash before running Aider
+        before_commit = get_git_head_commit(folder_path)
+        
+        # Capture Aider output by redirecting stdout
+        import io
+        import contextlib
+        
+        output_capture = io.StringIO()
+        with contextlib.redirect_stdout(output_capture):
+            # Run aider
+            aider_main(argv)
+        
+        # Get the captured output
+        aider_output = output_capture.getvalue()
+        
+        # Analyze Git commits to determine if files were changed
+        file_changed = analyze_aider_output(folder_path, before_commit)
+        
+        # Create user-friendly output
+        user_output = create_user_output(aider_output, file_changed)
+        
+        return {
+            "userOutput": user_output,
+            "fileChanged": file_changed
+        }
             
     except Exception as e:
         return {
