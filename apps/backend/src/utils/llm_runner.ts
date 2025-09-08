@@ -24,8 +24,8 @@ export class OllamaRunner {
 
   constructor(config: OllamaConfig = {}) {
     this.config = {
-      baseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
-      model: process.env.OLLAMA_MODEL || 'gpt-oss:20b',
+      baseUrl: 'http://localhost:11434',
+      model: 'gpt-oss:20b',
       timeout: 30000, // 30 seconds
       ...config
     };

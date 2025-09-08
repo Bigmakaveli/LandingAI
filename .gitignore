@@ -131,6 +131,3 @@ temp/
 
 # Project-specific folders to exclude
 .aider*
-
-# Keaara site (has its own git repository)
-keaara/

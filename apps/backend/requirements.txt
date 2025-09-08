@@ -2,3 +2,8 @@ setuptools
 wheel
 openai
 requests
+
+# Ollama installation (not a Python package - install separately):
+# curl -fsSL https://ollama.ai/install.sh | sh
+# ollama serve &
+# ollama pull gpt-oss:20b
