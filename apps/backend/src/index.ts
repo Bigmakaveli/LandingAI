@@ -182,8 +182,8 @@ async function callAIder(siteId: string, userMessage: string): Promise<{ success
       throw new Error(`Site directory does not exist: ${siteDir}`);
     }
     
-    // Get the path to the aider_runner.py script
-    const aiderScriptPath = path.resolve(process.cwd(), 'python/aider_runner.py');
+    // Get the path to the simple_ai_runner.py script
+    const aiderScriptPath = path.resolve(process.cwd(), 'python/simple_ai_runner.py');
     
     // Check if the Python script exists
     const scriptExists = await fs.stat(aiderScriptPath).then(() => true).catch(() => false);

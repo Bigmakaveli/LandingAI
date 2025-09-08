@@ -1,2 +1,4 @@
-aider-chat
+setuptools
+wheel
 openai
+requests
