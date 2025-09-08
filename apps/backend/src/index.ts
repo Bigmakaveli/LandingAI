@@ -4,7 +4,11 @@ import { promises as fs } from 'fs';
 import { spawn } from 'child_process';
 import cors from 'cors';
 import OpenAI from 'openai';
+import dotenv from 'dotenv';
 import { OPENAI_CONFIG } from './config';
+
+// Load environment variables from .env file
+dotenv.config();
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -27,6 +31,15 @@ function getHistoryPath(siteId?: string): string {
 }
 
 function getSiteDir(siteId: string): string {
+  return path.resolve(process.cwd(), `../../${siteId}/site`);
+}
+
+function getGitDir(siteId: string): string {
+  // For keaara, the git repository is at the root level, not in the site subdirectory
+  if (siteId === 'keaara') {
+    return path.resolve(process.cwd(), `../../${siteId}`);
+  }
+  // For other sites, git repository is in the site subdirectory
   return path.resolve(process.cwd(), `../../${siteId}/site`);
 }
 
@@ -73,6 +86,7 @@ function logOutgoingMessages(messages: any[], siteId?: string) {
 async function commitLocalChanges(siteId: string, message: string): Promise<{ success: boolean; message?: string; commitHash?: string; error?: string }> {
   try {
     const siteDir = getSiteDir(siteId);
+    const gitDir = getGitDir(siteId);
     
     // Check if site directory exists
     const siteExists = await fs.stat(siteDir).then(() => true).catch(() => false);
@@ -81,19 +95,19 @@ async function commitLocalChanges(siteId: string, message: string): Promise<{ su
     }
     
     // Check if it's a git repository
-    const gitDir = path.join(siteDir, '.git');
-    const isGitRepo = await fs.stat(gitDir).then(() => true).catch(() => false);
+    const gitRepoPath = path.join(gitDir, '.git');
+    const isGitRepo = await fs.stat(gitRepoPath).then(() => true).catch(() => false);
     
     if (!isGitRepo) {
-      throw new Error(`Site directory ${siteDir} is not a git repository`);
+      throw new Error(`Git directory ${gitDir} is not a git repository`);
     }
     
     console.log(`[Local Commit] Committing changes for site ${siteId}: ${message}`);
     
     // Stage and commit changes
     const commands = [
-      { cmd: 'git', args: ['add', '.'], cwd: siteDir },
-      { cmd: 'git', args: ['commit', '-m', message], cwd: siteDir }
+      { cmd: 'git', args: ['add', '.'], cwd: gitDir },
+      { cmd: 'git', args: ['commit', '-m', message], cwd: gitDir }
     ];
     
     let commitHash = '';
@@ -182,9 +196,8 @@ async function callAIder(siteId: string, userMessage: string): Promise<{ success
       throw new Error(`Site directory does not exist: ${siteDir}`);
     }
     
-    // Get the path to the aider_runner.py script (relative to project root)
-    const projectRoot = path.resolve(process.cwd(), '../../');
-    const aiderScriptPath = path.resolve(projectRoot, 'apps/backend/python/aider_runner.py');
+    // Get the path to the aider_runner.py script
+    const aiderScriptPath = path.resolve(process.cwd(), 'python/aider_runner.py');
     
     // Check if the Python script exists
     const scriptExists = await fs.stat(aiderScriptPath).then(() => true).catch(() => false);
@@ -192,8 +205,8 @@ async function callAIder(siteId: string, userMessage: string): Promise<{ success
       throw new Error(`Aider script not found: ${aiderScriptPath}`);
     }
     
-    // Use the virtual environment Python (relative to project root)
-    const pythonCommand = path.resolve(projectRoot, 'apps/backend/python/venv/bin/python');
+    // Use virtual environment Python
+    const pythonCommand = path.resolve(process.cwd(), 'python/venv/bin/python');
     
     // Check if Python is available
     try {
@@ -239,12 +252,10 @@ async function callAIder(siteId: string, userMessage: string): Promise<{ success
     
     console.log(`[Aider] Executing: ${pythonCommand} ${args.join(' ')}`);
     
-    // Spawn the Python process from the project root directory
+    // Spawn the Python process using system Python
     return new Promise((resolve, reject) => {
-      const projectRoot = path.resolve(process.cwd(), '../../');
       const pythonProcess = spawn(pythonCommand, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
-        cwd: projectRoot, // Run from project root to avoid Git directory confusion
         env: {
           ...process.env,
           OPENAI_API_KEY: OPENAI_CONFIG.API_KEY
@@ -436,6 +447,7 @@ async function startOverFromGitHub(siteId: string): Promise<{ success: boolean; 
     console.log(`[Start Over] Starting pull for site: ${siteId}`);
     
     const siteDir = getSiteDir(siteId);
+    const gitDir = getGitDir(siteId);
     
     // Check if site directory exists
     const siteExists = await fs.stat(siteDir).then(() => true).catch(() => false);
@@ -444,18 +456,18 @@ async function startOverFromGitHub(siteId: string): Promise<{ success: boolean; 
     }
     
     // Check if it's a git repository
-    const gitDir = path.join(siteDir, '.git');
-    const isGitRepo = await fs.stat(gitDir).then(() => true).catch(() => false);
+    const gitRepoPath = path.join(gitDir, '.git');
+    const isGitRepo = await fs.stat(gitRepoPath).then(() => true).catch(() => false);
     
     if (!isGitRepo) {
-      throw new Error(`Site directory ${siteDir} is not a git repository`);
+      throw new Error(`Git directory ${gitDir} is not a git repository`);
     }
     
     console.log(`[Start Over] Site directory: ${siteDir}`);
     
     // First, fetch the latest changes from remote
     const fetchResult = await new Promise<{ success: boolean; output: string; error?: string }>((resolve) => {
-      const process = spawn('git', ['fetch', 'origin'], { cwd: siteDir, stdio: ['pipe', 'pipe', 'pipe'] });
+      const process = spawn('git', ['fetch', 'origin'], { cwd: gitDir, stdio: ['pipe', 'pipe', 'pipe'] });
       
       let stdout = '';
       let stderr = '';
@@ -487,7 +499,7 @@ async function startOverFromGitHub(siteId: string): Promise<{ success: boolean; 
     
     // First, get the current HEAD commit hash to track what we're resetting from
     const currentHeadResult = await new Promise<{ success: boolean; output: string; error?: string }>((resolve) => {
-      const process = spawn('git', ['rev-parse', 'HEAD'], { cwd: siteDir, stdio: ['pipe', 'pipe', 'pipe'] });
+      const process = spawn('git', ['rev-parse', 'HEAD'], { cwd: gitDir, stdio: ['pipe', 'pipe', 'pipe'] });
       
       let stdout = '';
       let stderr = '';
@@ -517,7 +529,7 @@ async function startOverFromGitHub(siteId: string): Promise<{ success: boolean; 
     
     // Reset to origin/master to get the latest content
     const resetResult = await new Promise<{ success: boolean; output: string; error?: string }>((resolve) => {
-      const process = spawn('git', ['reset', '--hard', 'origin/master'], { cwd: siteDir, stdio: ['pipe', 'pipe', 'pipe'] });
+      const process = spawn('git', ['reset', '--hard', 'origin/master'], { cwd: gitDir, stdio: ['pipe', 'pipe', 'pipe'] });
       
       let stdout = '';
       let stderr = '';
@@ -581,7 +593,7 @@ async function startOverFromGitHub(siteId: string): Promise<{ success: boolean; 
     
     // Reinitialize git repository
     const initResult = await new Promise<{ success: boolean; output: string; error?: string }>((resolve) => {
-      const process = spawn('git', ['init'], { cwd: siteDir, stdio: ['pipe', 'pipe', 'pipe'] });
+      const process = spawn('git', ['init'], { cwd: gitDir, stdio: ['pipe', 'pipe', 'pipe'] });
       
       let stdout = '';
       let stderr = '';
@@ -613,7 +625,7 @@ async function startOverFromGitHub(siteId: string): Promise<{ success: boolean; 
     
     // Add remote origin
     const remoteResult = await new Promise<{ success: boolean; output: string; error?: string }>((resolve) => {
-      const process = spawn('git', ['remote', 'add', 'origin', 'https://github.com/Bigmakaveli/keara.git'], { cwd: siteDir, stdio: ['pipe', 'pipe', 'pipe'] });
+      const process = spawn('git', ['remote', 'add', 'origin', 'https://github.com/Bigmakaveli/keara.git'], { cwd: gitDir, stdio: ['pipe', 'pipe', 'pipe'] });
       
       let stdout = '';
       let stderr = '';
@@ -645,7 +657,7 @@ async function startOverFromGitHub(siteId: string): Promise<{ success: boolean; 
     
     // Add all files to the fresh repository
     const addResult = await new Promise<{ success: boolean; output: string; error?: string }>((resolve) => {
-      const process = spawn('git', ['add', '.'], { cwd: siteDir, stdio: ['pipe', 'pipe', 'pipe'] });
+      const process = spawn('git', ['add', '.'], { cwd: gitDir, stdio: ['pipe', 'pipe', 'pipe'] });
       
       let stdout = '';
       let stderr = '';
@@ -677,7 +689,7 @@ async function startOverFromGitHub(siteId: string): Promise<{ success: boolean; 
     
     // Create initial commit
     const commitResult = await new Promise<{ success: boolean; output: string; error?: string }>((resolve) => {
-      const process = spawn('git', ['commit', '-m', 'Initial commit - fresh start'], { cwd: siteDir, stdio: ['pipe', 'pipe', 'pipe'] });
+      const process = spawn('git', ['commit', '-m', 'Initial commit - fresh start'], { cwd: gitDir, stdio: ['pipe', 'pipe', 'pipe'] });
       
       let stdout = '';
       let stderr = '';
@@ -709,7 +721,7 @@ async function startOverFromGitHub(siteId: string): Promise<{ success: boolean; 
     
     // Get the current commit hash after reset
     const hashResult = await new Promise<{ success: boolean; output: string; error?: string }>((resolve) => {
-      const process = spawn('git', ['rev-parse', 'HEAD'], { cwd: siteDir, stdio: ['pipe', 'pipe', 'pipe'] });
+      const process = spawn('git', ['rev-parse', 'HEAD'], { cwd: gitDir, stdio: ['pipe', 'pipe', 'pipe'] });
       
       let stdout = '';
       let stderr = '';
@@ -764,6 +776,7 @@ async function undoLastCommit(siteId: string): Promise<{ success: boolean; messa
     console.log(`[Undo] Starting undo for site: ${siteId}`);
     
     const siteDir = getSiteDir(siteId);
+    const gitDir = getGitDir(siteId);
     
     // Check if site directory exists
     const siteExists = await fs.stat(siteDir).then(() => true).catch(() => false);
@@ -772,18 +785,18 @@ async function undoLastCommit(siteId: string): Promise<{ success: boolean; messa
     }
     
     // Check if it's a git repository
-    const gitDir = path.join(siteDir, '.git');
-    const isGitRepo = await fs.stat(gitDir).then(() => true).catch(() => false);
+    const gitRepoPath = path.join(gitDir, '.git');
+    const isGitRepo = await fs.stat(gitRepoPath).then(() => true).catch(() => false);
     
     if (!isGitRepo) {
-      throw new Error(`Site directory ${siteDir} is not a git repository`);
+      throw new Error(`Git directory ${gitDir} is not a git repository`);
     }
     
     console.log(`[Undo] Site directory: ${siteDir}`);
     
     // Check how many commits exist in the repository
     const commitCountResult = await new Promise<{ success: boolean; output: string; error?: string }>((resolve) => {
-      const process = spawn('git', ['rev-list', '--count', 'HEAD'], { cwd: siteDir, stdio: ['pipe', 'pipe', 'pipe'] });
+      const process = spawn('git', ['rev-list', '--count', 'HEAD'], { cwd: gitDir, stdio: ['pipe', 'pipe', 'pipe'] });
       
       let stdout = '';
       let stderr = '';
@@ -826,7 +839,7 @@ async function undoLastCommit(siteId: string): Promise<{ success: boolean; messa
     
     // Get the last commit hash before undoing
     const lastCommitResult = await new Promise<{ success: boolean; output: string; error?: string }>((resolve) => {
-      const process = spawn('git', ['log', '--oneline', '-1'], { cwd: siteDir, stdio: ['pipe', 'pipe', 'pipe'] });
+      const process = spawn('git', ['log', '--oneline', '-1'], { cwd: gitDir, stdio: ['pipe', 'pipe', 'pipe'] });
       
       let stdout = '';
       let stderr = '';
@@ -864,7 +877,7 @@ async function undoLastCommit(siteId: string): Promise<{ success: boolean; messa
     
     // Reset to the previous commit (undo the last commit)
     const resetResult = await new Promise<{ success: boolean; output: string; error?: string }>((resolve) => {
-      const process = spawn('git', ['reset', '--hard', 'HEAD~1'], { cwd: siteDir, stdio: ['pipe', 'pipe', 'pipe'] });
+      const process = spawn('git', ['reset', '--hard', 'HEAD~1'], { cwd: gitDir, stdio: ['pipe', 'pipe', 'pipe'] });
       
       let stdout = '';
       let stderr = '';
@@ -930,6 +943,7 @@ async function redoLastCommit(siteId: string): Promise<{ success: boolean; messa
     console.log(`[Redo] Starting redo for site: ${siteId}`);
     
     const siteDir = getSiteDir(siteId);
+    const gitDir = getGitDir(siteId);
     
     // Check if site directory exists
     const siteExists = await fs.stat(siteDir).then(() => true).catch(() => false);
@@ -938,11 +952,11 @@ async function redoLastCommit(siteId: string): Promise<{ success: boolean; messa
     }
     
     // Check if it's a git repository
-    const gitDir = path.join(siteDir, '.git');
-    const isGitRepo = await fs.stat(gitDir).then(() => true).catch(() => false);
+    const gitRepoPath = path.join(gitDir, '.git');
+    const isGitRepo = await fs.stat(gitRepoPath).then(() => true).catch(() => false);
     
     if (!isGitRepo) {
-      throw new Error(`Site directory ${siteDir} is not a git repository`);
+      throw new Error(`Git directory ${gitDir} is not a git repository`);
     }
     
     console.log(`[Redo] Site directory: ${siteDir}`);
@@ -972,7 +986,7 @@ async function redoLastCommit(siteId: string): Promise<{ success: boolean; messa
     
     // Reset to the undone commit (redo)
     const redoResult = await new Promise<{ success: boolean; output: string; error?: string }>((resolve) => {
-      const process = spawn('git', ['reset', '--hard', undoneCommitHash.trim()], { cwd: siteDir, stdio: ['pipe', 'pipe', 'pipe'] });
+      const process = spawn('git', ['reset', '--hard', undoneCommitHash.trim()], { cwd: gitDir, stdio: ['pipe', 'pipe', 'pipe'] });
       
       let stdout = '';
       let stderr = '';
@@ -1049,6 +1063,7 @@ async function redoLastCommit(siteId: string): Promise<{ success: boolean; messa
 async function pushToGitHub(siteId: string): Promise<{ success: boolean; message?: string; commitHash?: string; commitMessage?: string; error?: string; details?: any }> {
   try {    
     const siteDir = getSiteDir(siteId);
+    const gitDir = getGitDir(siteId);
     
     // Check if site directory exists
     const siteExists = await fs.stat(siteDir).then(() => true).catch(() => false);
@@ -1057,11 +1072,11 @@ async function pushToGitHub(siteId: string): Promise<{ success: boolean; message
     }
     
     // Check if it's a git repository
-    const gitDir = path.join(siteDir, '.git');
-    const isGitRepo = await fs.stat(gitDir).then(() => true).catch(() => false);
+    const gitRepoPath = path.join(gitDir, '.git');
+    const isGitRepo = await fs.stat(gitRepoPath).then(() => true).catch(() => false);
     
     if (!isGitRepo) {
-      throw new Error(`Site directory ${siteDir} is not a git repository`);
+      throw new Error(`Git directory ${gitDir} is not a git repository`);
     }
     
     console.log(`[Publish] Publishing local commits to GitHub for site ${siteId}`);
@@ -1069,7 +1084,7 @@ async function pushToGitHub(siteId: string): Promise<{ success: boolean; message
     // First, pull any remote changes and rebase
     console.log(`[Publish] Pulling latest changes from GitHub`);
     const pullResult = await new Promise<{ success: boolean; output: string; error?: string }>((resolve) => {
-      const process = spawn('git', ['pull', 'origin', 'master', '--rebase'], { cwd: siteDir, stdio: ['pipe', 'pipe', 'pipe'] });
+      const process = spawn('git', ['pull', 'origin', 'master', '--rebase'], { cwd: gitDir, stdio: ['pipe', 'pipe', 'pipe'] });
       
       let stdout = '';
       let stderr = '';
@@ -1102,7 +1117,7 @@ async function pushToGitHub(siteId: string): Promise<{ success: boolean; message
     // Now push local commits to GitHub
     console.log(`[Publish] Pushing local commits to GitHub`);
     const pushResult = await new Promise<{ success: boolean; output: string; error?: string }>((resolve) => {
-      const process = spawn('git', ['push', 'origin', 'master'], { cwd: siteDir, stdio: ['pipe', 'pipe', 'pipe'] });
+      const process = spawn('git', ['push', 'origin', 'master'], { cwd: gitDir, stdio: ['pipe', 'pipe', 'pipe'] });
       
       let stdout = '';
       let stderr = '';
@@ -1134,7 +1149,7 @@ async function pushToGitHub(siteId: string): Promise<{ success: boolean; message
     
     // Get the latest commit info
     const commitResult = await new Promise<{ success: boolean; output: string; error?: string }>((resolve) => {
-      const process = spawn('git', ['log', '-1', '--pretty=format:%H|%s'], { cwd: siteDir, stdio: ['pipe', 'pipe', 'pipe'] });
+      const process = spawn('git', ['log', '-1', '--pretty=format:%H|%s'], { cwd: gitDir, stdio: ['pipe', 'pipe', 'pipe'] });
       
       let stdout = '';
       let stderr = '';
