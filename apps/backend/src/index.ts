@@ -494,6 +494,10 @@ async function startOverFromGitHub(siteId: string): Promise<{ success: boolean; 
     });
     
     if (!fetchResult.success) {
+      // Check if the error is due to repository not existing
+      if (fetchResult.error?.includes('Repository not found') || fetchResult.error?.includes('does not appear to be a git repository')) {
+        throw new Error(`❌ **GitHub repository not found** - The remote repository doesn't exist yet. Please create the repository on GitHub first or contact support to set it up.`);
+      }
       throw new Error(`Failed to fetch from remote: ${fetchResult.error}`);
     }
     
@@ -1111,6 +1115,10 @@ async function pushToGitHub(siteId: string): Promise<{ success: boolean; message
     });
     
     if (!pullResult.success) {
+      // Check if the error is due to repository not existing
+      if (pullResult.error?.includes('Repository not found') || pullResult.error?.includes('does not appear to be a git repository')) {
+        throw new Error(`❌ **GitHub repository not found** - The remote repository doesn't exist yet. Please create the repository on GitHub first or contact support to set it up.`);
+      }
       console.log(`[Publish] Pull failed, trying to push anyway: ${pullResult.error}`);
     }
     
@@ -1144,6 +1152,10 @@ async function pushToGitHub(siteId: string): Promise<{ success: boolean; message
     });
     
     if (!pushResult.success) {
+      // Check if the error is due to repository not existing
+      if (pushResult.error?.includes('Repository not found') || pushResult.error?.includes('does not appear to be a git repository')) {
+        throw new Error(`❌ **GitHub repository not found** - The remote repository doesn't exist yet. Please create the repository on GitHub first or contact support to set it up.`);
+      }
       throw new Error(`Failed to push to GitHub: ${pushResult.error}`);
     }
     
