@@ -22,6 +22,12 @@ import {
   redoLastCommit, 
   pushToGitHub 
 } from '../utils/githubUtils';
+import { 
+  sendToLLM, 
+  getAvailableModels, 
+  pullModel, 
+  OllamaMessage 
+} from '../utils/llm_runner';
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -490,6 +496,186 @@ export function setupRoutes(app: express.Application) {
       console.error('[Test Aider] Error:', err);
       return res.status(500).json({ 
         error: 'Failed to test Aider',
+        details: err instanceof Error ? err.message : String(err)
+      });
+    }
+  });
+
+  // ===== OLLAMA ENDPOINTS =====
+
+  // Test Ollama connection and get available models
+  app.get('/api/ollama/models', async (req, res) => {
+    try {
+      console.log('[Ollama] Getting available models');
+      
+      const result = await getAvailableModels();
+      
+      if (result.success) {
+        return res.json({
+          success: true,
+          models: result.models,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        return res.status(500).json({
+          success: false,
+          error: result.error || 'Failed to get models',
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+    } catch (err) {
+      console.error('[Ollama] Error getting models:', err);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to get Ollama models',
+        details: err instanceof Error ? err.message : String(err)
+      });
+    }
+  });
+
+  // Pull a model from Ollama
+  app.post('/api/ollama/pull', async (req, res) => {
+    try {
+      const { modelName } = req.body;
+      
+      if (!modelName) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'modelName is required' 
+        });
+      }
+      
+      console.log(`[Ollama] Pulling model: ${modelName}`);
+      
+      const result = await pullModel(modelName);
+      
+      if (result.success) {
+        return res.json({
+          success: true,
+          message: `Successfully pulled model: ${modelName}`,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        return res.status(500).json({
+          success: false,
+          error: result.error || 'Failed to pull model',
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+    } catch (err) {
+      console.error('[Ollama] Error pulling model:', err);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to pull Ollama model',
+        details: err instanceof Error ? err.message : String(err)
+      });
+    }
+  });
+
+  // Send messages to Ollama
+  app.post('/api/ollama/chat', async (req, res) => {
+    try {
+      const { systemMessage, messages, model, baseUrl } = req.body;
+      
+      if (!systemMessage || !messages || !Array.isArray(messages)) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'systemMessage and messages array are required' 
+        });
+      }
+      
+      // Validate message format
+      const validMessages: OllamaMessage[] = messages.map((msg: any) => {
+        if (!msg.role || !msg.content) {
+          throw new Error('Each message must have role and content');
+        }
+        if (!['system', 'user', 'assistant'].includes(msg.role)) {
+          throw new Error('Message role must be system, user, or assistant');
+        }
+        return {
+          role: msg.role as 'system' | 'user' | 'assistant',
+          content: String(msg.content)
+        };
+      });
+      
+      console.log(`[Ollama] Sending ${validMessages.length} messages to Ollama`);
+      
+      const config = {
+        ...(model && { model }),
+        ...(baseUrl && { baseUrl })
+      };
+      
+      const result = await sendToLLM(systemMessage, validMessages, config);
+      
+      if (result.success) {
+        return res.json({
+          success: true,
+          content: result.content,
+          model: result.model,
+          timestamp: result.timestamp
+        });
+      } else {
+        return res.status(500).json({
+          success: false,
+          error: result.error || 'Failed to get response from Ollama',
+          timestamp: result.timestamp
+        });
+      }
+      
+    } catch (err) {
+      console.error('[Ollama] Error in chat:', err);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to process Ollama chat',
+        details: err instanceof Error ? err.message : String(err)
+      });
+    }
+  });
+
+  // Test Ollama with a simple message
+  app.post('/api/ollama/test', async (req, res) => {
+    try {
+      const { message, model } = req.body;
+      
+      if (!message) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'message is required' 
+        });
+      }
+      
+      console.log(`[Ollama] Testing with message: ${message}`);
+      
+      const systemMessage = "You are a helpful AI assistant. Respond concisely and helpfully.";
+      const messages: OllamaMessage[] = [
+        { role: 'user', content: String(message) }
+      ];
+      
+      const config = model ? { model } : undefined;
+      const result = await sendToLLM(systemMessage, messages, config);
+      
+      if (result.success) {
+        return res.json({
+          success: true,
+          response: result.content,
+          model: result.model,
+          timestamp: result.timestamp
+        });
+      } else {
+        return res.status(500).json({
+          success: false,
+          error: result.error || 'Failed to get response from Ollama',
+          timestamp: result.timestamp
+        });
+      }
+      
+    } catch (err) {
+      console.error('[Ollama] Error in test:', err);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to test Ollama',
         details: err instanceof Error ? err.message : String(err)
       });
     }
