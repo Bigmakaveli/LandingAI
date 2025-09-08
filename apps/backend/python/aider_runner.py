@@ -47,141 +47,6 @@ def find_web_files(folder_path: str) -> List[str]:
     
     return files
 
-
-def get_git_head_commit(folder_path: str) -> str:
-    """
-    Get the current HEAD commit hash
-    
-    Args:
-        folder_path: Path to the folder containing the Git repository
-        
-    Returns:
-        Commit hash string, or empty string if not a Git repo
-    """
-    import subprocess
-    import os
-    
-    try:
-        # Check if we're in a Git repository
-        if not os.path.exists(os.path.join(folder_path, '.git')):
-            return ""
-        
-        # Get the current HEAD commit hash
-        result = subprocess.run(
-            ['git', 'rev-parse', 'HEAD'],
-            cwd=folder_path,
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        
-        if result.returncode == 0:
-            return result.stdout.strip()
-        else:
-            return ""
-            
-    except Exception as e:
-        print(f"Error getting Git HEAD commit: {e}")
-        return ""
-
-
-def analyze_aider_output(folder_path: str, before_commit: str) -> bool:
-    """
-    Analyze Git commits to determine if files were actually changed
-    
-    Args:
-        folder_path: Path to the folder containing the Git repository
-        before_commit: Commit hash before Aider ran
-        
-    Returns:
-        True if files were modified, False otherwise
-    """
-    import subprocess
-    import os
-    
-    try:
-        # Check if we're in a Git repository
-        if not os.path.exists(os.path.join(folder_path, '.git')):
-            return False
-        
-        # Get the current HEAD commit hash after Aider ran
-        after_commit = get_git_head_commit(folder_path)
-        
-        if not after_commit:
-            return False
-        
-        # If the commit hash changed, files were modified
-        return before_commit != after_commit
-        
-    except Exception as e:
-        print(f"Error analyzing Git commits: {e}")
-        return False
-
-
-def create_user_output(aider_output: str, file_changed: bool) -> str:
-    """
-    Create a user-friendly output message based on Aider's response
-    
-    Args:
-        aider_output: The raw output from Aider
-        file_changed: Whether files were actually modified
-        
-    Returns:
-        User-friendly message
-    """
-    if file_changed:
-        return aider_output
-        # Extract the key information from Aider output
-        lines = aider_output.split('\n')
-        
-        # Look for the main response (usually after the "=" separator)
-        response_lines = []
-        in_response = False
-        
-        for line in lines:
-            if '=' * 20 in line:  # Separator line
-                in_response = True
-                continue
-            if in_response and line.strip():
-                # Stop at certain markers
-                if any(marker in line for marker in ['Tokens:', 'Commit', 'Applied edit']):
-                    break
-                response_lines.append(line.strip())
-        
-        # Clean up the response
-        response = '\n'.join(response_lines).strip()
-        
-        if response:
-            return f"✅ Changes applied successfully!\n\n{response}\n\nYour requested changes have been applied to the site."
-        else:
-            return "✅ Changes applied successfully! Your requested changes have been applied to the site."
-    else:
-        # Extract the actual LLM response for questions/answers
-        lines = aider_output.split('\n')
-        
-        # Look for the main response (after file additions and before tokens)
-        response_lines = []
-        in_response = False
-        
-        for line in lines:
-            # Start capturing after we see "Added ... to the chat" lines
-            if line.strip().startswith('Added ') and line.strip().endswith(' to the chat.'):
-                continue
-            elif line.strip() and not line.startswith('─') and not line.startswith('Aider v') and not line.startswith('Main model:') and not line.startswith('Weak model:') and not line.startswith('Git repo:') and not line.startswith('Repo-map:'):
-                # Stop at tokens line
-                if line.strip().startswith('Tokens:'):
-                    break
-                response_lines.append(line.strip())
-        
-        # Clean up the response
-        response = '\n'.join(response_lines).strip()
-        
-        if response:
-            return response  # Return the actual LLM response without prefix
-        else:
-            return "Hello! How can I help you with your landing page today?"
-
-
 def run_aider_on_folder(folder_path: str, system_message: str, user_message: str) -> dict:
     """
     Run Aider on a folder containing web files
@@ -195,7 +60,7 @@ def run_aider_on_folder(folder_path: str, system_message: str, user_message: str
         Dictionary with structured response:
         {
             "userOutput": str,  # Summary of what Aider did or answered
-            "fileChanged": bool  # Whether files were actually modified
+            "codeDiff": str     # Raw Aider output containing changes made
         }
     """
     try:
@@ -214,7 +79,7 @@ def run_aider_on_folder(folder_path: str, system_message: str, user_message: str
         if not web_files:
             return {
                 "userOutput": f"No HTML, JS, or CSS files found in {target_folder}",
-                "fileChanged": False
+                "codeDiff": ""
             }
         
         # Change to the target folder directory
@@ -232,7 +97,6 @@ def run_aider_on_folder(folder_path: str, system_message: str, user_message: str
                 "--yes",
                 "--no-pretty",
                 "--no-detect-urls",
-                "--no-git"
             ]
             
             # Add all web files to the context
@@ -240,10 +104,6 @@ def run_aider_on_folder(folder_path: str, system_message: str, user_message: str
                 # Convert to relative path from the target folder
                 relative_path = os.path.relpath(file_path, target_folder)
                 argv.extend(["--file", relative_path])
-            
-            # Get the commit hash before running Aider (use parent directory for git operations)
-            git_folder = folder_path  # Use the original folder for git operations
-            before_commit = get_git_head_commit(git_folder)
             
             # Capture Aider output by redirecting stdout
             import io
@@ -257,15 +117,12 @@ def run_aider_on_folder(folder_path: str, system_message: str, user_message: str
             # Get the captured output
             aider_output = output_capture.getvalue()
             
-            # Analyze Git commits to determine if files were changed
-            file_changed = analyze_aider_output(git_folder, before_commit)
-            
-            # Create user-friendly output
-            user_output = create_user_output(aider_output, file_changed)
+            # Return the raw Aider output as codeDiff
+            user_output = "Changes have been applied to your website."
             
             return {
                 "userOutput": user_output,
-                "fileChanged": file_changed
+                "codeDiff": aider_output
             }
             
         finally:
@@ -275,7 +132,7 @@ def run_aider_on_folder(folder_path: str, system_message: str, user_message: str
     except Exception as e:
         return {
             "userOutput": f"Error running Aider: {str(e)}",
-            "fileChanged": False
+            "codeDiff": ""
         }
 
 

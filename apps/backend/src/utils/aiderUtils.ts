@@ -6,7 +6,7 @@ import { OPENAI_CONFIG } from '../config';
 
 // ===== AIDER INTEGRATION =====
 
-export async function callAIder(siteId: string, userMessage: string): Promise<{ success: boolean; output: string; error?: string; fileChanged: boolean }> {
+export async function callAIder(siteId: string, userMessage: string): Promise<{ success: boolean; output: string; error?: string; codeDiff: string }> {
   try {
     console.log(`[Aider] Starting Aider execution for site: ${siteId}`);
     console.log(`[Aider] User message: ${userMessage}`);
@@ -57,12 +57,9 @@ export async function callAIder(siteId: string, userMessage: string): Promise<{ 
     
     // Prepare the command arguments with formatted message
     const systemMessage = `
-    You are an assistance for a non-technical user who is using an AI website builder to create their website.
-    - If the user is requesting a site change:
-      - do the change.
-      - return a very short summary of what you did in a very simple language with no technical details.
-    - Otherwise:
-      - return the answer in a single line.
+    You are an AI assistant for a non-technical user building a website. 
+    - make sure to not break the website.
+    - if there is design involved, be creative and make the changes always look nice.
     `;
     
     const args = [
@@ -116,7 +113,7 @@ export async function callAIder(siteId: string, userMessage: string): Promise<{ 
             resolve({
               success: true,
               output: jsonResponse.userOutput || stdout.trim(),
-              fileChanged: jsonResponse.fileChanged || false,
+              codeDiff: jsonResponse.codeDiff || "",
               error: stderr.trim() || undefined
             });
           } catch (parseError) {
@@ -124,7 +121,7 @@ export async function callAIder(siteId: string, userMessage: string): Promise<{ 
             resolve({
               success: true,
               output: stdout.trim(),
-              fileChanged: false,
+              codeDiff: "",
               error: stderr.trim() || undefined
             });
           }
@@ -132,7 +129,7 @@ export async function callAIder(siteId: string, userMessage: string): Promise<{ 
           resolve({
             success: false,
             output: stdout.trim(),
-            fileChanged: false,
+            codeDiff: "",
             error: stderr.trim() || `Process exited with code ${code}`
           });
         }
@@ -145,7 +142,7 @@ export async function callAIder(siteId: string, userMessage: string): Promise<{ 
           success: false,
           output: stdout.trim(),
           error: error.message,
-          fileChanged: false
+          codeDiff: ""
         });
       });
       
@@ -156,7 +153,7 @@ export async function callAIder(siteId: string, userMessage: string): Promise<{ 
           success: false,
           output: stdout.trim(),
           error: 'Process timed out after 5 minutes',
-          fileChanged: false
+          codeDiff: ""
         });
       }, 5 * 60 * 1000); // 5 minutes timeout
     });
@@ -167,7 +164,7 @@ export async function callAIder(siteId: string, userMessage: string): Promise<{ 
       success: false,
       output: '',
       error: error instanceof Error ? error.message : String(error),
-      fileChanged: false
+      codeDiff: ""
     };
   }
 }

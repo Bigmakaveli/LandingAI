@@ -25,7 +25,7 @@ export class OllamaRunner {
   constructor(config: OllamaConfig = {}) {
     this.config = {
       baseUrl: 'http://localhost:11434',
-      model: 'llama2',
+      model: 'qwen2.5:7b-instruct',
       timeout: 30000, // 30 seconds
       ...config
     };
