@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import { cloudOllamaService } from './cloudOllama';
 
 export interface OllamaMessage {
   role: 'system' | 'user' | 'assistant';
@@ -91,7 +92,7 @@ export class OllamaRunner {
       const response = await fetch(`${this.config.baseUrl}/api/tags`);
       return response.ok;
     } catch (error) {
-      console.log(`[Ollama] Ollama not accessible: ${error}`);
+      console.log(`[Ollama] Ollama not accessible at ${this.config.baseUrl} - this is expected on cloud deployments`);
       return false;
     }
   }
@@ -234,7 +235,15 @@ export const ollamaRunner = new OllamaRunner();
 // Export utility functions for easy use
 export async function sendToLLM(systemMessage: string, messages: OllamaMessage[], config?: OllamaConfig): Promise<OllamaResponse> {
   const runner = config ? new OllamaRunner(config) : ollamaRunner;
-  return runner.sendToLLM(systemMessage, messages);
+  const result = await runner.sendToLLM(systemMessage, messages);
+  
+  // If local Ollama fails, try cloud service
+  if (!result.success) {
+    console.log('[Ollama] Local Ollama failed, trying cloud service...');
+    return await cloudOllamaService.sendToLLM(systemMessage, messages);
+  }
+  
+  return result;
 }
 
 export async function getAvailableModels(config?: OllamaConfig): Promise<{ success: boolean; models?: string[]; error?: string }> {
