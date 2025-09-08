@@ -11,11 +11,11 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/sites': {
-        target: 'https://landingai-ty2i.onrender.com',
+        target: 'http://localhost:3001',
         changeOrigin: true
       },
       '/api': {
-        target: 'https://landingai-ty2i.onrender.com',
+        target: 'http://localhost:3001',
         changeOrigin: true
       }
     }

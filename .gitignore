@@ -130,3 +130,4 @@ tmp/
 temp/
 
 # Project-specific folders to exclude
+.aider*
