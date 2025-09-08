@@ -191,13 +191,21 @@ async function callAIder(siteId: string, userMessage: string): Promise<{ success
       throw new Error(`Aider script not found: ${aiderScriptPath}`);
     }
     
-    // Get the path to the Python virtual environment
-    const venvPythonPath = path.resolve(process.cwd(), 'python/venv/bin/python');
+    // Use system Python (python3) instead of virtual environment
+    const pythonCommand = 'python3';
     
-    // Check if the virtual environment exists
-    const venvExists = await fs.stat(venvPythonPath).then(() => true).catch(() => false);
-    if (!venvExists) {
-      throw new Error(`Python virtual environment not found: ${venvPythonPath}`);
+    // Check if Python is available
+    try {
+      await new Promise((resolve, reject) => {
+        const checkProcess = spawn(pythonCommand, ['--version'], { stdio: 'pipe' });
+        checkProcess.on('close', (code) => {
+          if (code === 0) resolve(true);
+          else reject(new Error(`Python not found or not working`));
+        });
+        checkProcess.on('error', reject);
+      });
+    } catch (error) {
+      throw new Error(`Python not available: ${error}`);
     }
     
     // Check if OPENAI_API_KEY is available
@@ -207,7 +215,7 @@ async function callAIder(siteId: string, userMessage: string): Promise<{ success
     
     console.log(`[Aider] Site directory: ${siteDir}`);
     console.log(`[Aider] Script path: ${aiderScriptPath}`);
-    console.log(`[Aider] Python interpreter: ${venvPythonPath}`);
+    console.log(`[Aider] Python interpreter: ${pythonCommand}`);
     
     // Prepare the command arguments with formatted message
     const systemMessage = `
@@ -228,11 +236,11 @@ async function callAIder(siteId: string, userMessage: string): Promise<{ success
       OPENAI_CONFIG.API_KEY
     ];
     
-    console.log(`[Aider] Executing: ${venvPythonPath} ${args.join(' ')}`);
+    console.log(`[Aider] Executing: ${pythonCommand} ${args.join(' ')}`);
     
-    // Spawn the Python process using the virtual environment
+    // Spawn the Python process using system Python
     return new Promise((resolve, reject) => {
-      const pythonProcess = spawn(venvPythonPath, args, {
+      const pythonProcess = spawn(pythonCommand, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
           ...process.env,
