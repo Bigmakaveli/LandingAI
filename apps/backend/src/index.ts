@@ -31,6 +31,11 @@ function getHistoryPath(siteId?: string): string {
 }
 
 function getSiteDir(siteId: string): string {
+  // For keaara, the website files are in the root directory, not in a site subdirectory
+  if (siteId === 'keaara') {
+    return path.resolve(process.cwd(), `../../${siteId}`);
+  }
+  // For other sites, website files are in the site subdirectory
   return path.resolve(process.cwd(), `../../${siteId}/site`);
 }
 

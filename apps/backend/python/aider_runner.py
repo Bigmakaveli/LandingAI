@@ -199,13 +199,13 @@ def run_aider_on_folder(folder_path: str, system_message: str, user_message: str
         }
     """
     try:
-        # Check if there's a 'site' subdirectory (for keaara structure)
+        # Check if there's a 'site' subdirectory (for some site structures)
         site_path = os.path.join(folder_path, 'site')
         if os.path.exists(site_path) and os.path.isdir(site_path):
             # Use the site subdirectory for web files
             target_folder = site_path
         else:
-            # Use the main folder for web files
+            # Use the main folder for web files (like keaara structure)
             target_folder = folder_path
         
         # Find all web files in the target folder
