@@ -23,7 +23,7 @@ import {
   pushToGitHub 
 } from '../utils/githubUtils';
 import { 
-  sendToLLM, 
+  sendToOpenAI, 
   getAvailableModels, 
   pullModel, 
   OllamaMessage 
@@ -54,7 +54,7 @@ async function getCodeDiffSummary(codeDiff: string, userRequest: string): Promis
       { role: 'user', content: 'Summarize the changes briefly.' }
     ];
 
-    const result = await sendToLLM(systemMessage, messages);
+    const result = await sendToOpenAI(systemMessage, messages);
     
     if (result.success && result.content) {
       console.log(`[Code Diff Summary] Successfully generated summary: ${result.content.substring(0, 100)}...`);
@@ -187,18 +187,18 @@ async function processGeneralQuestionWithOllama(messages: any[], siteId: string)
   // Add current user message
   ollamaMessages.push({ role: 'user', content: userContent });
   
-  console.log(`[General Chat] Sending ${ollamaMessages.length} messages to Ollama`);
+  console.log(`[General Chat] Sending ${ollamaMessages.length} messages to OpenAI`);
   
   try {
-    const result = await sendToLLM(systemMessage, ollamaMessages);
+      const result = await sendToOpenAI(systemMessage, ollamaMessages);
     
     if (!result.success) {
-      console.error('[General Chat] Failed to get response from Ollama:', result.error);
-      throw new Error(result.error || 'Failed to get response from Ollama');
+      console.error('[General Chat] Failed to get response from OpenAI:', result.error);
+      throw new Error(result.error || 'Failed to get response from OpenAI');
     }
     
     const assistantContent = result.content || 'I apologize, but I couldn\'t generate a response. Please try again.';
-    console.log(`[General Chat] Received response from Ollama: ${assistantContent.substring(0, 100)}...`);
+    console.log(`[General Chat] Received response from OpenAI: ${assistantContent.substring(0, 100)}...`);
     
     // Create assistant message
     const assistantMessage = {
@@ -346,7 +346,7 @@ export function setupRoutes(app: express.Application) {
         ...(baseUrl && { baseUrl })
       };
       
-      const result = await sendToLLM(systemMessage, validMessages, config);
+      const result = await sendToOpenAI(systemMessage, validMessages, config);
       
       if (result.success) {
         return res.json({
@@ -393,7 +393,7 @@ export function setupRoutes(app: express.Application) {
       ];
       
       const config = model ? { model } : undefined;
-      const result = await sendToLLM(systemMessage, messages, config);
+      const result = await sendToOpenAI(systemMessage, messages, config);
       
       if (result.success) {
         return res.json({
@@ -569,12 +569,12 @@ export function setupRoutes(app: express.Application) {
         { role: 'user', content: userMessage }
       ];
 
-      console.log(`[Site Chat] Calling sendToLLM with system message and user message`);
-      const decisionResult = await sendToLLM(decisionSystemMessage, decisionMessages);
+      console.log(`[Site Chat] Calling sendToOpenAI with system message and user message`);
+      const decisionResult = await sendToOpenAI(decisionSystemMessage, decisionMessages);
       console.log(`[Site Chat] Decision result:`, decisionResult);
       
       if (!decisionResult.success) {
-        console.error('[Site Chat] Failed to get decision from Ollama:', decisionResult.error);
+        console.error('[Site Chat] Failed to get decision from OpenAI:', decisionResult.error);
         const assistantMessage = { 
           role: 'assistant', 
           content: 'Sorry, I encountered an issue processing your request. Please try again.' 

@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import { cloudOllamaService } from './cloudOllama';
+import { OPENAI_CONFIG } from '../config';
 
 export interface OllamaMessage {
   role: 'system' | 'user' | 'assistant';
@@ -20,12 +21,19 @@ export interface OllamaConfig {
   timeout?: number;
 }
 
+export interface OpenAIConfig {
+  apiKey?: string;
+  model?: string;
+  baseUrl?: string;
+  timeout?: number;
+}
+
 export class OllamaRunner {
   private config: OllamaConfig;
 
   constructor(config: OllamaConfig = {}) {
     this.config = {
-      baseUrl: 'http://localhost:11434',
+      baseUrl: 'http://127.0.0.1:11434',
       model: 'gpt-oss:20b',
       timeout: 30000, // 30 seconds
       ...config
@@ -38,7 +46,7 @@ export class OllamaRunner {
    * @param messages - Array of conversation messages
    * @returns Promise with Ollama response
    */
-  async sendToLLM(systemMessage: string, messages: OllamaMessage[]): Promise<OllamaResponse> {
+  async sendToOllama(systemMessage: string, messages: OllamaMessage[]): Promise<OllamaResponse> {
     try {
       console.log(`[Ollama] Sending ${messages.length} messages to model: ${this.config.model}`);
       console.log(`[Ollama] System message: ${systemMessage}`);
@@ -80,6 +88,110 @@ export class OllamaRunner {
         success: false,
         error: error instanceof Error ? error.message : String(error),
         timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  /**
+   * Send messages to OpenAI model
+   * @param systemMessage - System message to set context
+   * @param messages - Array of conversation messages
+   * @param config - OpenAI configuration
+   * @returns Promise with OpenAI response
+   */
+  async sendToOpenAI(systemMessage: string, messages: OllamaMessage[], config: OpenAIConfig = {}): Promise<OllamaResponse> {
+    try {
+      const apiKey = config.apiKey || OPENAI_CONFIG.API_KEY;
+      if (!apiKey) {
+        throw new Error('OpenAI API key is required. Set OPENAI_API_KEY environment variable or pass it in config.');
+      }
+
+      const model = config.model || OPENAI_CONFIG.DEFAULT_MODEL;
+      const baseUrl = config.baseUrl || 'https://api.openai.com/v1';
+      const timeout = config.timeout || 30000;
+
+      console.log(`[OpenAI] Sending ${messages.length} messages to model: ${model}`);
+      console.log(`[OpenAI] System message: ${systemMessage}`);
+
+      // Prepare the request payload
+      const payload = {
+        model: model,
+        messages: [
+          { role: 'system', content: systemMessage },
+          ...messages
+        ],
+        max_tokens: 4000,
+        temperature: OPENAI_CONFIG.SITE_SPECIFIC_TEMPERATURE
+      };
+
+      // Make the request to OpenAI
+      const response = await this.makeOpenAIRequest(payload, apiKey, baseUrl, timeout);
+      
+      if (response.success) {
+        console.log(`[OpenAI] Successfully received response from ${model}`);
+        return {
+          success: true,
+          content: response.content,
+          model: model,
+          timestamp: new Date().toISOString()
+        };
+      } else {
+        throw new Error(response.error || 'Unknown error from OpenAI');
+      }
+
+    } catch (error) {
+      console.error(`[OpenAI] Error sending to LLM:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  /**
+   * Make a request to OpenAI API
+   */
+  private async makeOpenAIRequest(payload: any, apiKey: string, baseUrl: string, timeout: number): Promise<{ success: boolean; content?: string; error?: string }> {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorData.error?.message || ''}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
+        return {
+          success: true,
+          content: data.choices[0].message.content
+        };
+      } else {
+        return {
+          success: false,
+          error: 'No content in response'
+        };
+      }
+
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error)
       };
     }
   }
@@ -233,9 +345,9 @@ export class OllamaRunner {
 export const ollamaRunner = new OllamaRunner();
 
 // Export utility functions for easy use
-export async function sendToLLM(systemMessage: string, messages: OllamaMessage[], config?: OllamaConfig): Promise<OllamaResponse> {
+export async function sendToOllama(systemMessage: string, messages: OllamaMessage[], config?: OllamaConfig): Promise<OllamaResponse> {
   const runner = config ? new OllamaRunner(config) : ollamaRunner;
-  const result = await runner.sendToLLM(systemMessage, messages);
+  const result = await runner.sendToOllama(systemMessage, messages);
   
   // If local Ollama fails, try cloud service
   if (!result.success) {
@@ -244,6 +356,11 @@ export async function sendToLLM(systemMessage: string, messages: OllamaMessage[]
   }
   
   return result;
+}
+
+export async function sendToOpenAI(systemMessage: string, messages: OllamaMessage[], config?: OpenAIConfig): Promise<OllamaResponse> {
+  const runner = new OllamaRunner();
+  return await runner.sendToOpenAI(systemMessage, messages, config);
 }
 
 export async function getAvailableModels(config?: OllamaConfig): Promise<{ success: boolean; models?: string[]; error?: string }> {
