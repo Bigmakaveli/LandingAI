@@ -120,6 +120,26 @@
             background: #000;
             transform: translateY(-2px);
         }
+
+        /* Simple test button styles */
+        #testButton {
+            background: linear-gradient(90deg,#2bb1a8,#6a8bd8);
+            color: #fff;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(43,46,66,0.08);
+            transition: transform .16s ease, box-shadow .16s ease, opacity .16s ease;
+        }
+        #testButton:focus {
+            outline: 3px solid rgba(43,177,168,0.18);
+            outline-offset: 3px;
+        }
+        #testButton:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 14px 34px rgba(43,46,66,0.12);
+        }
     </style>
 </head>
 <body>
@@ -146,6 +166,10 @@
                 <h2>Contact</h2>
                 <p>For more information, please contact us at test@example.com</p>
             </div>
+        </div>
+
+        <div style="text-align:center; margin-top:12px;">
+            <button id="testButton" type="button" aria-label="Run test" title="Run test">Run Test</button>
         </div>
     </div>
 
@@ -178,6 +202,25 @@
         window.addEventListener('scroll', toggleBtn, { passive: true });
         toggleBtn();
         btn.addEventListener('click', function(){ window.scrollTo({ top: 0, behavior: 'smooth' }); });
+
+        var testBtn = document.getElementById('testButton');
+        if (testBtn) {
+          testBtn.addEventListener('click', function(){
+            // simple test action: log and animate a quick pulse
+            console.log('Test button clicked');
+            try {
+              testBtn.animate([
+                { transform: 'scale(1)' },
+                { transform: 'scale(1.06)' },
+                { transform: 'scale(1)' }
+              ], { duration: 260, easing: 'ease-out' });
+            } catch (e) {
+              // fallback: quick style toggle
+              testBtn.style.transform = 'scale(1.04)';
+              setTimeout(function(){ testBtn.style.transform = ''; }, 180);
+            }
+          });
+        }
       });
     })();
     </script>
