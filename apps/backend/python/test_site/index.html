@@ -33,9 +33,31 @@
             background-color: #f9f9f9;
             border-radius: 5px;
         }
+
+        /* Top-center fixed green button */
+        .top-center-btn {
+            position: fixed;
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10000;
+            background-color: #28a745;
+            color: #fff;
+            border: none;
+            padding: 10px 18px;
+            border-radius: 6px;
+            cursor: pointer;
+            box-shadow: 0 6px 14px rgba(40,167,69,0.18);
+            transition: background-color 0.18s ease, transform 0.12s ease;
+        }
+        .top-center-btn:hover {
+            background-color: #218838;
+            transform: translateX(-50%) translateY(-1px);
+        }
     </style>
 </head>
 <body>
+    <button class="top-center-btn" aria-label="New Button">Green Button</button>
     <div class="container">
         <h1>Welcome to Our Test Site</h1>
         <div class="content">
