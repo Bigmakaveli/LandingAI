@@ -140,6 +140,27 @@
             transform: translateY(-3px);
             box-shadow: 0 14px 34px rgba(43,46,66,0.12);
         }
+
+        /* Red button styles */
+        #redButton {
+            background: linear-gradient(90deg,#e53935,#d81b60);
+            color: #fff;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(43,46,66,0.08);
+            transition: transform .16s ease, box-shadow .16s ease, opacity .16s ease;
+            margin-left: 8px;
+        }
+        #redButton:focus {
+            outline: 3px solid rgba(216,27,96,0.2);
+            outline-offset: 3px;
+        }
+        #redButton:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 14px 34px rgba(43,46,66,0.12);
+        }
     </style>
 </head>
 <body>
@@ -170,6 +191,7 @@
 
         <div style="text-align:center; margin-top:12px;">
             <button id="testButton" type="button" aria-label="Run test" title="Run test">Run Test</button>
+            <button id="redButton" type="button" aria-label="Red button" title="Red button">Red Button</button>
         </div>
     </div>
 
@@ -218,6 +240,25 @@
               // fallback: quick style toggle
               testBtn.style.transform = 'scale(1.04)';
               setTimeout(function(){ testBtn.style.transform = ''; }, 180);
+            }
+          });
+        }
+
+        var redBtn = document.getElementById('redButton');
+        if (redBtn) {
+          redBtn.addEventListener('click', function(){
+            // simple red button action: log and animate a quick pulse
+            console.log('Red button clicked');
+            try {
+              redBtn.animate([
+                { transform: 'scale(1)' },
+                { transform: 'scale(1.06)' },
+                { transform: 'scale(1)' }
+              ], { duration: 260, easing: 'ease-out' });
+            } catch (e) {
+              // fallback for older browsers
+              redBtn.style.transform = 'scale(1.04)';
+              setTimeout(function(){ redBtn.style.transform = ''; }, 180);
             }
           });
         }
