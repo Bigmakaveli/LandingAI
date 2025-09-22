@@ -47,7 +47,7 @@ def find_web_files(folder_path: str) -> List[str]:
     
     return files
 
-def run_aider_on_folder(folder_path: str, system_message: str, user_message: str) -> dict:
+def run_aider_on_folder(folder_path: str, system_message: str, user_message: str, model: str = "gpt-5") -> dict:
     """
     Run Aider on a folder containing web files
     
@@ -55,6 +55,7 @@ def run_aider_on_folder(folder_path: str, system_message: str, user_message: str
         folder_path: Path to the folder containing HTML, JS, and CSS files
         system_message: System message to send to Aider
         user_message: User message to send to Aider
+        model: Model to use (default: gpt-5-mini)
         
     Returns:
         Dictionary with structured response:
@@ -73,12 +74,20 @@ def run_aider_on_folder(folder_path: str, system_message: str, user_message: str
             # Use the main folder for web files (like keaara structure)
             target_folder = folder_path
         
-        # Find all web files in the target folder
+        # Find all web files in the target folder and all subdirectories
         web_files = find_web_files(target_folder)
+        
+        # Also find web files in all subdirectories of the main folder
+        main_folder = Path(folder_path)
+        if main_folder.exists():
+            for subdir in main_folder.iterdir():
+                if subdir.is_dir() and subdir.name != 'site':  # Skip 'site' as it's handled separately
+                    subdir_files = find_web_files(str(subdir))
+                    web_files.extend(subdir_files)
         
         if not web_files:
             return {
-                "userOutput": f"No HTML, JS, or CSS files found in {target_folder}",
+                "userOutput": f"No HTML, JS, or CSS files found in {target_folder} or its subdirectories",
                 "codeDiff": ""
             }
         
@@ -92,11 +101,16 @@ def run_aider_on_folder(folder_path: str, system_message: str, user_message: str
             
             # Build arguments for aider
             argv = [
-                "--model", "gpt-5",
+                "--model", model,
+                "--weak-model", "gpt-4o",
+                "--editor-model", "gpt-4o",
                 "--message", full_message,
                 "--yes",
                 "--no-pretty",
                 "--no-detect-urls",
+                "--restore-chat-history",
+                "--cache-prompts",
+                "--cache-keepalive-pings", "360",
             ]
             
             # Add all web files to the context
@@ -116,6 +130,12 @@ def run_aider_on_folder(folder_path: str, system_message: str, user_message: str
             
             # Get the captured output
             aider_output = output_capture.getvalue()
+            
+            # Limit the codeDiff output to prevent summarization failures
+            # 1000 characters should be enough for meaningful code context while staying manageable
+            max_code_diff_length = 3000
+            if len(aider_output) > max_code_diff_length:
+                aider_output = aider_output[:max_code_diff_length] + "\n\n... (output truncated due to length)"
             
             # Return the raw Aider output as codeDiff
             user_output = "Changes have been applied to your website."
@@ -164,6 +184,12 @@ Examples:
     )
     
     parser.add_argument(
+        "--model",
+        default="gpt-5",
+        help="Model to use (default: gpt-5)"
+    )
+    
+    parser.add_argument(
         "--api-key",
         help="OpenAI API key (or set OPENAI_API_KEY environment variable)"
     )
@@ -184,7 +210,8 @@ Examples:
     result = run_aider_on_folder(
         args.folder_path,
         args.system_message,
-        args.user_message
+        args.user_message,
+        args.model
     )
     
     # Output the result as JSON

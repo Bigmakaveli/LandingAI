@@ -130,4 +130,4 @@ tmp/
 temp/
 
 # Project-specific folders to exclude
-.aider*
+.aider*landingai_deployment_*.tar.gz

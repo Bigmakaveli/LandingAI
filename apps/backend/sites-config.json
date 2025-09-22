@@ -1,0 +1,4 @@
+{
+  "sitesPath": "/Users/tamernas/Desktop/LandingAI-sites",
+  "description": "Configuration for sites directory path. This should point to the directory containing all site folders (keara, balance_therapy, nafas_albkhur, etc.)"
+}

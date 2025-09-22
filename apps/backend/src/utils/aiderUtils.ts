@@ -1,165 +1,30 @@
-import { spawn } from 'child_process';
-import { promises as fs } from 'fs';
-import path from 'path';
-import { getSiteDir } from './general';
-import { OPENAI_CONFIG } from '../config';
+import { aiderProcessManager } from './aiderProcessManager';
+
+// ===== LOGGING UTILITIES =====
+const log = {
+  request: (action: string, details?: string) => console.log(`[${action}] ${details || ''}`),
+  step: (step: string, details?: string) => console.log(`[Step] ${step}${details ? `: ${details}` : ''}`),
+  result: (action: string, success: boolean, details?: any) => 
+    console.log(`[${action}] ${success ? 'SUCCESS' : 'FAILED'}${details ? `: ${JSON.stringify(details)}` : ''}`),
+  error: (action: string, error: any) => console.error(`[${action}] ERROR:`, error),
+  info: (action: string, message: string) => console.log(`[${action}] ${message}`)
+};
 
 // ===== AIDER INTEGRATION =====
 
 export async function callAIder(siteId: string, userMessage: string): Promise<{ success: boolean; output: string; error?: string; codeDiff: string }> {
   try {
-    console.log(`[Aider] Starting Aider execution for site: ${siteId}`);
-    console.log(`[Aider] User message: ${userMessage}`);
+    log.request('Aider', `Starting execution for site ${siteId}`);
     
-    // Get the site directory path
-    const siteDir = getSiteDir(siteId);
+    // Use the persistent process manager
+    const result = await aiderProcessManager.sendMessage(siteId, userMessage);
     
-    // Check if site directory exists
-    const siteExists = await fs.stat(siteDir).then(() => true).catch(() => false);
-    if (!siteExists) {
-      throw new Error(`Site directory does not exist: ${siteDir}`);
-    }
+    log.result('Aider', result.success, `Process count: ${aiderProcessManager.getProcessCount()}`);
     
-    // Get the path to the aider_runner.py script
-    const aiderScriptPath = path.resolve(process.cwd(), 'python/aider_runner.py');
-    
-    // Check if the Python script exists
-    const scriptExists = await fs.stat(aiderScriptPath).then(() => true).catch(() => false);
-    if (!scriptExists) {
-      throw new Error(`Aider script not found: ${aiderScriptPath}`);
-    }
-    
-    // Use virtual environment Python
-    const pythonCommand = path.resolve(process.cwd(), 'python/venv/bin/python');
-    
-    // Check if Python is available
-    try {
-      await new Promise((resolve, reject) => {
-        const checkProcess = spawn(pythonCommand, ['--version'], { stdio: 'pipe' });
-        checkProcess.on('close', (code) => {
-          if (code === 0) resolve(true);
-          else reject(new Error(`Python not found or not working`));
-        });
-        checkProcess.on('error', reject);
-      });
-    } catch (error) {
-      throw new Error(`Python not available: ${error}`);
-    }
-    
-    // Check if OPENAI_API_KEY is available
-    if (!OPENAI_CONFIG.API_KEY || OPENAI_CONFIG.API_KEY.startsWith('sk-REPLACE')) {
-      throw new Error('OPENAI_API_KEY not configured');
-    }
-    
-    console.log(`[Aider] Site directory: ${siteDir}`);
-    console.log(`[Aider] Script path: ${aiderScriptPath}`);
-    console.log(`[Aider] Python interpreter: ${pythonCommand}`);
-    
-    // Prepare the command arguments with formatted message
-    const systemMessage = `
-    You are an AI assistant for a non-technical user building a website. 
-    - make sure to not break the website.
-    - if there is design involved, be creative and make the changes always look nice.
-    `;
-    
-    const args = [
-      aiderScriptPath,
-      siteDir,
-      systemMessage,
-      userMessage,
-      '--api-key',
-      OPENAI_CONFIG.API_KEY
-    ];
-    
-    console.log(`[Aider] Executing: ${pythonCommand} ${args.join(' ')}`);
-    
-    // Spawn the Python process using system Python
-    return new Promise((resolve, reject) => {
-      const pythonProcess = spawn(pythonCommand, args, {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          OPENAI_API_KEY: OPENAI_CONFIG.API_KEY
-        }
-      });
-      
-      let stdout = '';
-      let stderr = '';
-      
-      // Collect stdout
-      pythonProcess.stdout.on('data', (data) => {
-        const output = data.toString();
-        stdout += output;
-        console.log(`[Aider] stdout: ${output.trim()}`);
-      });
-      
-      // Collect stderr
-      pythonProcess.stderr.on('data', (data) => {
-        const output = data.toString();
-        stderr += output;
-        console.error(`[Aider] stderr: ${output.trim()}`);
-      });
-      
-      // Handle process completion
-      pythonProcess.on('close', (code) => {
-        console.log(`[Aider] Process exited with code: ${code}`);
-        
-        if (code === 0) {
-          try {
-            // Try to parse the JSON response from Python
-            const jsonResponse = JSON.parse(stdout.trim());
-            console.log(`[Aider] Parsed JSON response:`, jsonResponse);
-            
-            resolve({
-              success: true,
-              output: jsonResponse.userOutput || stdout.trim(),
-              codeDiff: jsonResponse.codeDiff || "",
-              error: stderr.trim() || undefined
-            });
-          } catch (parseError) {
-            console.log(`[Aider] Failed to parse JSON, using raw output`);
-            resolve({
-              success: true,
-              output: stdout.trim(),
-              codeDiff: "",
-              error: stderr.trim() || undefined
-            });
-          }
-        } else {
-          resolve({
-            success: false,
-            output: stdout.trim(),
-            codeDiff: "",
-            error: stderr.trim() || `Process exited with code ${code}`
-          });
-        }
-      });
-      
-      // Handle process errors
-      pythonProcess.on('error', (error) => {
-        console.error(`[Aider] Process error:`, error);
-        reject({
-          success: false,
-          output: stdout.trim(),
-          error: error.message,
-          codeDiff: ""
-        });
-      });
-      
-      // Set a timeout to prevent hanging
-      setTimeout(() => {
-        pythonProcess.kill();
-        resolve({
-          success: false,
-          output: stdout.trim(),
-          error: 'Process timed out after 5 minutes',
-          codeDiff: ""
-        });
-      }, 5 * 60 * 1000); // 5 minutes timeout
-    });
+    return result;
     
   } catch (error) {
-    console.error(`[Aider] Error calling Aider:`, error);
+    log.error('Aider', error);
     return {
       success: false,
       output: '',
@@ -167,4 +32,27 @@ export async function callAIder(siteId: string, userMessage: string): Promise<{ 
       codeDiff: ""
     };
   }
+}
+
+// ===== PROCESS MANAGEMENT UTILITIES =====
+
+export function getAiderProcessStatus(siteId?: string) {
+  if (siteId) {
+    return aiderProcessManager.getProcessInfo(siteId);
+  }
+  return {
+    totalProcesses: aiderProcessManager.getProcessCount(),
+    processes: Array.from(aiderProcessManager['processes'].keys()).map(siteId => ({
+      siteId,
+      ...aiderProcessManager.getProcessInfo(siteId)
+    }))
+  };
+}
+
+export function terminateAiderProcess(siteId: string) {
+  aiderProcessManager.terminateProcess(siteId);
+}
+
+export function terminateAllAiderProcesses() {
+  aiderProcessManager.terminateAllProcesses();
 }

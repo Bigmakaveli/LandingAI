@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 // ===== CONSTANTS =====
 const BUTTON_SIZE = 56
@@ -106,6 +106,83 @@ function calculatePanelPosition(launcherPos: Position, windowWidth: number, wind
 
 // ===== CUSTOM HOOKS =====
 
+function useSiteStatus(siteId?: string, onStatusReady?: () => void) {
+  const [siteStatus, setSiteStatus] = useState<'READY' | 'UNDER_DEV' | 'UNKNOWN'>('UNKNOWN')
+  const [isPolling, setIsPolling] = useState(false)
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  const checkSiteStatus = async () => {
+    if (!siteId) return
+
+    try {
+      console.log('Checking site status for:', siteId)
+      const response = await fetch(`/api/${siteId}/site-status`)
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Site status response:', data)
+        setSiteStatus(data.status || 'UNKNOWN')
+        return data.status
+      } else {
+        console.error('Site status check failed:', response.status, response.statusText)
+      }
+    } catch (error) {
+      console.error('Failed to check site status:', error)
+    }
+    return 'UNKNOWN'
+  }
+
+  const startPolling = () => {
+    if (isPolling || !siteId) return
+    
+    console.log('Starting polling for site status...')
+    setIsPolling(true)
+    pollingIntervalRef.current = setInterval(async () => {
+      console.log('Polling site status...')
+      const status = await checkSiteStatus()
+      console.log('Polled status:', status)
+      if (status === 'READY') {
+        console.log('Status is READY, stopping polling and calling onStatusReady')
+        stopPolling()
+        // Call the callback to reload history
+        if (onStatusReady) {
+          console.log('🔄 Calling onStatusReady callback to reload history')
+          onStatusReady()
+        }
+      }
+    }, 2000) // Poll every 2 seconds
+  }
+
+  const stopPolling = () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+      pollingIntervalRef.current = null
+    }
+    setIsPolling(false)
+  }
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopPolling()
+    }
+  }, [])
+
+  // Check status when siteId changes
+  useEffect(() => {
+    if (siteId) {
+      checkSiteStatus()
+    }
+  }, [siteId])
+
+  return {
+    siteStatus,
+    isPolling,
+    checkSiteStatus,
+    startPolling,
+    stopPolling
+  }
+}
+
 function usePositioning() {
   const [launcherPos, setLauncherPos] = useState<Position | null>(null)
   const [panelPos, setPanelPos] = useState<Position | null>(null)
@@ -171,70 +248,100 @@ function useDragging() {
   }
 }
 
-function useChatHistory(siteId?: string) {
+function useChatHistory(siteId?: string, onHistoryLoaded?: () => void) {
   const [messages, setMessages] = useState<UiMessage[]>([
     { id: 1, role: 'assistant', text: 'Hi! I can help modify this site.' }
   ])
   
-  const loadHistory = async () => {
+  const loadHistory = useCallback(async () => {
     if (!siteId) {
       console.warn('ChatOverlay: siteId is required for chat functionality')
       return
     }
     
+    console.log('🔄 loadHistory called for siteId:', siteId)
+    
     try {
       const url = `/api/${siteId}/chat/history`
-      const response = await fetch(url)
+      console.log('📡 Fetching from URL:', url)
+      // Add cache-busting parameter to ensure we get fresh data
+      const cacheBustUrl = `${url}?t=${Date.now()}`
+      console.log('📡 Cache-busted URL:', cacheBustUrl)
+      const response = await fetch(cacheBustUrl, {
+        method: 'GET',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      })
       const data = await response.json()
       
+      console.log('📦 Raw response data:', data)
+      
       const history = Array.isArray(data?.history) ? data.history : []
-          if (history.length) {
-           const uiMsgs: UiMessage[] = history.map((m: any, idx: number) => {
-             const role = m.role || 'assistant'
-             const content = m.content || ''
-             
-             // Handle complex content structure with attachments
-             if (Array.isArray(content)) {
-               const textParts: string[] = []
-               const attachments: Attachment[] = []
-               
-               content.forEach((part: any) => {
-                 if (part.type === 'text' && part.text) {
-                   textParts.push(part.text)
-                 } else if (part.type === 'image_url' && part.image_url) {
-                   const url = typeof part.image_url === 'string' ? part.image_url : part.image_url.url
-                   if (url) {
-                     attachments.push({
-                       kind: 'image',
-                       name: `Image ${attachments.length + 1}`,
-                       url: url
-                     })
-                   }
-                 }
-               })
-               
-               return {
-                 id: idx + 1,
-                 role,
-                 text: textParts.join('\n') || undefined,
-                 attachments: attachments.length > 0 ? attachments : undefined
-               }
-             } else {
-               // Handle simple string content
-               return { id: idx + 1, role, text: String(content) }
-             }
-           })
-           
-           // Filter out null messages and set the filtered messages
-           const filteredMsgs = uiMsgs.filter(msg => msg !== null) as UiMessage[]
-           if (filteredMsgs.length) {
-             setMessages(filteredMsgs)
-           }
-         }
+      console.log('📝 Processing history:', history.length, 'messages')
+      
+      if (history.length) {
+        const uiMsgs: UiMessage[] = history.map((m: any, idx: number) => {
+          const role = m.role || 'assistant'
+          const content = m.content || ''
+          
+          // Handle complex content structure with attachments
+          if (Array.isArray(content)) {
+            const textParts: string[] = []
+            const attachments: Attachment[] = []
+            
+            content.forEach((part: any) => {
+              if (part.type === 'text' && part.text) {
+                textParts.push(part.text)
+              } else if (part.type === 'image_url' && part.image_url) {
+                const url = typeof part.image_url === 'string' ? part.image_url : part.image_url.url
+                if (url) {
+                  attachments.push({
+                    kind: 'image',
+                    name: `Image ${attachments.length + 1}`,
+                    url: url
+                  })
+                }
+              }
+            })
+            
+            return {
+              id: idx + 1,
+              role,
+              text: textParts.join('\n') || undefined,
+              attachments: attachments.length > 0 ? attachments : undefined
+            }
+          } else {
+            // Handle simple string content
+            return { id: idx + 1, role, text: String(content) }
+          }
+        })
+        
+        // Filter out null messages and set the filtered messages
+        const filteredMsgs = uiMsgs.filter(msg => msg !== null) as UiMessage[]
+        console.log('✅ Setting messages:', filteredMsgs.length, 'filtered messages')
+        console.log('📋 Messages content:', filteredMsgs.map(m => ({ role: m.role, text: m.text?.substring(0, 50) + '...' })))
+        setMessages(filteredMsgs)
+      } else {
+        // If no history, reset to default message
+        console.log('⚠️ No history found, resetting to default message')
+        setMessages([{ id: 1, role: 'assistant', text: 'Hi! I can help modify this site.' }])
+      }
+      
+      // Call the callback after history is loaded
+      if (onHistoryLoaded) {
+        console.log('🔄 Calling onHistoryLoaded callback')
+        onHistoryLoaded()
+      }
     } catch (error) {
-      console.error('Failed to load chat history:', error)
+      console.error('❌ Failed to load chat history:', error)
+      // Still call the callback even if there's an error
+      if (onHistoryLoaded) {
+        onHistoryLoaded()
+      }
     }
-  }
+  }, [siteId, onHistoryLoaded])
   
   const clearHistory = async () => {
     if (!siteId) return
@@ -345,7 +452,23 @@ function ChatOverlay({ siteId }: ChatOverlayProps) {
   
   const { launcherPos, setLauncherPos, panelPos, setPanelPos, initializeLauncherPosition, updatePositionsOnResize } = usePositioning()
   const { isDragging, setIsDragging, isPanelDragging, setIsPanelDragging, dragOffsetRef, panelDragOffsetRef, didDragRef } = useDragging()
-  const { messages, setMessages, loadHistory, clearHistory } = useChatHistory(siteId)
+  
+  // First declare the callbacks
+  const handleHistoryLoaded = useCallback(() => {
+    // After history is loaded, check site status
+    console.log('History loaded, checking site status...')
+    // We'll call checkSiteStatus after the hooks are initialized
+  }, [])
+
+  const { messages, setMessages, loadHistory, clearHistory } = useChatHistory(siteId, handleHistoryLoaded)
+  
+  const handleStatusReady = useCallback(() => {
+    // When site becomes ready, reload history
+    console.log('🔄 Site became ready, reloading history...')
+    loadHistory()
+  }, [loadHistory])
+
+  const { siteStatus, isPolling, checkSiteStatus, startPolling } = useSiteStatus(siteId, handleStatusReady)
   const { attachments, onFilesSelected, removeAttachment, clearAttachments } = useFileAttachments()
   
   const panelRef = useRef<HTMLDivElement | null>(null)
@@ -367,6 +490,25 @@ function ChatOverlay({ siteId }: ChatOverlayProps) {
     initializeLauncherPosition()
     loadHistory()
   }, [siteId])
+
+  // Check site status after history is loaded
+  useEffect(() => {
+    if (messages.length > 0) {
+      console.log('History loaded, checking site status...')
+      checkSiteStatus()
+    }
+  }, [messages.length, checkSiteStatus])
+
+  // Handle site status changes
+  useEffect(() => {
+    console.log('🔄 Site status changed:', siteStatus, 'isPolling:', isPolling)
+    if (siteStatus === 'UNDER_DEV' && !isPolling) {
+      console.log('🚧 Site is under development, starting polling...')
+      startPolling()
+    }
+    // Note: History reload is now handled directly in the polling mechanism
+    // when status changes to READY, so we don't need to handle it here
+  }, [siteStatus, isPolling, startPolling])
 
   // Keep launcher within bounds on resize
   useEffect(() => {
@@ -786,7 +928,7 @@ function ChatOverlay({ siteId }: ChatOverlayProps) {
             maxWidth: '80%',
             padding: '10px 12px',
             borderRadius: 14,
-            background: isUser ? '#2563eb' : '#f3f4f6',
+            background: isUser ? '#2563eb' : 'transparent',
             color: isUser ? '#ffffff' : '#111827',
             boxShadow: '0 1px 1px rgba(0,0,0,0.04)'
           }}
@@ -816,26 +958,31 @@ function ChatOverlay({ siteId }: ChatOverlayProps) {
     )
   }
 
-  const renderLoadingIndicator = () => (
-    <div style={{ display: 'flex', justifyContent: 'flex-start' }} aria-busy={true}>
-      <div style={{
-        padding: '10px 12px',
-        borderRadius: 14,
-        background: '#f3f4f6',
-        color: '#6b7280',
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 8
-      }}>
-        <svg width="18" height="18" viewBox="0 0 50 50" fill="none" aria-hidden="true">
-          <circle cx="25" cy="25" r="20" stroke="#9ca3af" strokeWidth="4" strokeLinecap="round" strokeDasharray="31.4 31.4">
-            <animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="1s" repeatCount="indefinite" />
-          </circle>
-        </svg>
-        <span>Thinking...</span>
+  const renderLoadingIndicator = () => {
+    const isSiteUnderDev = siteStatus === 'UNDER_DEV' && !isLoading
+    const text = isSiteUnderDev ? 'Processing your request...' : 'Thinking...'
+    
+    return (
+      <div style={{ display: 'flex', justifyContent: 'flex-start' }} aria-busy={true}>
+        <div style={{
+          padding: '10px 12px',
+          borderRadius: 14,
+          background: 'transparent',
+          color: '#6b7280',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 8
+        }}>
+          <svg width="18" height="18" viewBox="0 0 50 50" fill="none" aria-hidden="true">
+            <circle cx="25" cy="25" r="20" stroke="#9ca3af" strokeWidth="4" strokeLinecap="round" strokeDasharray="31.4 31.4">
+              <animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="1s" repeatCount="indefinite" />
+            </circle>
+          </svg>
+          <span>{text}</span>
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
 
   const renderAttachment = (att: Attachment, idx: number) => {
@@ -1102,6 +1249,26 @@ function ChatOverlay({ siteId }: ChatOverlayProps) {
                 </svg>
               </button>
               <button
+                onClick={() => {
+                  console.log('Manual reload triggered')
+                  loadHistory()
+                }}
+                aria-label="Reload history"
+                title="Reload history"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#6b7280',
+                  cursor: 'pointer',
+                  padding: 6,
+                  borderRadius: 6
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                </svg>
+              </button>
+              <button
                 onClick={() => setOpen(false)}
                 aria-label="Minimize chat"
                 title="Minimize chat"
@@ -1125,8 +1292,9 @@ function ChatOverlay({ siteId }: ChatOverlayProps) {
           <div style={{ flex: 1, overflow: 'auto', padding: 12, background: '#ffffff' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {messages.map(renderMessage)}
-              {/* Only show loading indicator when no AI message placeholder exists */}
-              {isLoading && !messages.some(m => m.role === 'assistant' && m.text === 'Thinking...') && renderLoadingIndicator()}
+              {/* Show thinking indicator when site is under development or when loading */}
+              {(isLoading && !messages.some(m => m.role === 'assistant' && m.text === 'Thinking...')) || 
+               (siteStatus === 'UNDER_DEV' && !isLoading) ? renderLoadingIndicator() : null}
             </div>
           </div>
 

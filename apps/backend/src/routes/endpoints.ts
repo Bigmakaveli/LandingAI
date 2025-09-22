@@ -4,8 +4,13 @@ import OpenAI from 'openai';
 import { OPENAI_CONFIG } from '../config';
 import { 
   getSiteDir, 
+  getSiteDirAsync,
   logOutgoingMessages, 
-  extractTextFromMessageContent 
+  extractTextFromMessageContent,
+  preserveMessageContent,
+  processMessageWithImages,
+  appendImageUrlToText,
+  cleanImageReferencesFromText
 } from '../utils/general';
 import { 
   readSiteFiles, 
@@ -14,7 +19,55 @@ import {
   appendToHistory, 
   applyFilesToSite 
 } from '../utils/siteManagement';
-import { callAIder } from '../utils/aiderUtils';
+import { checkDatabaseConnection } from '../utils/database';
+import { promises as fs } from 'fs';
+import { callAIder, getAiderProcessStatus, terminateAiderProcess, terminateAllAiderProcesses } from '../utils/aiderUtils';
+import { 
+  addGiftCard, 
+  editGiftCard, 
+  removeGiftCard, 
+  listGiftCards, 
+  getGiftCard 
+} from '../utils/giftCardManager';
+
+// ===== SITE STATUS TRACKING =====
+type SiteStatus = 'READY' | 'UNDER_DEV';
+
+// Map to track the status of each site
+const siteStatusMap = new Map<string, SiteStatus>();
+
+// Helper functions for site status management
+function getSiteStatus(siteId: string): SiteStatus {
+  return siteStatusMap.get(siteId) || 'READY';
+}
+
+function setSiteStatus(siteId: string, status: SiteStatus): void {
+  siteStatusMap.set(siteId, status);
+  console.log(`[Site Status] ${siteId}: ${status}`);
+}
+
+// ===== LOGGING UTILITIES =====
+const log = {
+  request: (siteId: string, action: string) => console.log(`[${action}] ${siteId}`),
+  step: (step: string, details?: string) => console.log(`[Step] ${step}${details ? `: ${details}` : ''}`),
+  result: (action: string, success: boolean, details?: any) => 
+    console.log(`[${action}] ${success ? 'SUCCESS' : 'FAILED'}${details ? `: ${JSON.stringify(details)}` : ''}`),
+  error: (action: string, error: any) => console.error(`[${action}] ERROR:`, error),
+  info: (action: string, message: string) => console.log(`[${action}] ${message}`)
+};
+
+// Helper function to read site description
+async function readSiteDescription(siteId: string): Promise<string> {
+  try {
+    const siteDir = await getSiteDirAsync(siteId);
+    const descriptionPath = `${siteDir}/site_description.txt`;
+    const content = await fs.readFile(descriptionPath, 'utf8');
+    return content.trim();
+  } catch (error) {
+    log.info('Site Description', `No description found for ${siteId}, using default`);
+    return 'No specific site description available. This is a general website.';
+  }
+}
 import { 
   commitLocalChanges, 
   startOverFromGitHub, 
@@ -24,100 +77,77 @@ import {
 } from '../utils/githubUtils';
 import { 
   sendToOpenAI, 
-  getAvailableModels, 
-  pullModel, 
-  OllamaMessage 
+  OpenAIMessage 
 } from '../utils/llm_runner';
 
 // ===== CHAT PROCESSING =====
-async function getCodeDiffSummary(codeDiff: string, userRequest: string): Promise<{ success: boolean; content?: string; error?: string }> {
+async function getCodeDiffSummary(userRequest: string, codeDiff?: string): Promise<{ success: boolean; content?: string; error?: string }> {
   try {
-    console.log(`[Code Diff Summary] Summarizing changes for user request: ${userRequest}`);
+    log.step('Code Diff Summary', 'Generating summary');
     
-    const systemMessage = `You are a helpful AI assistant that explains code changes in simple, non-technical language for website users.
-          Analyze the code changes and explain what was changed in a user-friendly way. Focus on what the user will see or experience.
-
-          Guidelines:
-          - Be concise and direct
-          - Use simple language
-          - Focus on visual or functional changes the user will notice
-          - Avoid technical jargon
-          - Keep response under 2 sentences
-          - If multiple changes, mention only the main ones
-
-          User's original request: "${userRequest}"
-
-          Code diff to analyze:
-          ${codeDiff}`;
-
-    const messages: OllamaMessage[] = [
-      { role: 'user', content: 'Summarize the changes briefly.' }
-    ];
+    // Read system message from file
+    const systemMessagePath = path.resolve(process.cwd(), 'code_diff_system_message.txt');
+    let systemMessage = await fs.readFile(systemMessagePath, 'utf8');
+    systemMessage = systemMessage.replace('${userRequest}', userRequest);
+    log.step('Code Diff Summary', 'Loaded system message from file :' + systemMessage);
+    
+    let messages: OpenAIMessage[];
+    if(codeDiff) {
+      messages = [
+        { role: 'user', content: 'Summarize those code changes briefly : ' + codeDiff }
+      ];
+    } else {
+      messages = [
+        { role: 'user', content: 'Write a summary of the following user request (assume the coding is done) : ' + userRequest }
+      ];
+    }
 
     const result = await sendToOpenAI(systemMessage, messages);
-    
-    if (result.success && result.content) {
-      console.log(`[Code Diff Summary] Successfully generated summary: ${result.content.substring(0, 100)}...`);
-      return {
-        success: true,
-        content: result.content
-      };
-    } else {
-      console.error(`[Code Diff Summary] Failed to generate summary:`, result.error);
-      return {
-        success: false,
-        error: result.error || 'Failed to generate summary'
-      };
-    }
-    
+    log.result('Code Diff Summary', result.success);
+    return {
+      success: result.success,
+      content: result.response_for_message ?? "✅ Your changes have been saved!"
+    };
   } catch (error) {
-    console.error(`[Code Diff Summary] Error:`, error);
+    log.error('Code Diff Summary', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error)
+      content: "Error generating summary"
     };
   }
 }
 
-async function processChatWithAider(messages: any[], siteId: string) {
-  // Extract the last user message
+async function processChatWithAider(messages: any[], siteId: string, promptForCode?: string) {
   const lastUserMessage = [...messages].reverse().find((m: any) => m?.role === 'user' && m?.content);
+  // Use the provided prompt_for_code if available, otherwise extract from messages
+  let prompt: string;
+  let originalUserMessage: string = extractTextFromMessageContent(lastUserMessage.content);
   
-  if (!lastUserMessage) {
-    throw new Error('No user message found');
+  if (promptForCode) {
+    prompt = promptForCode;
+    log.step('Aider Chat', 'Using prompt_for_code');
+  } else {
+    prompt = originalUserMessage;
+    log.step('Aider Chat', 'Using fallback user message');
   }
   
-  const userContent = extractTextFromMessageContent(lastUserMessage.content);
-  console.log(`[Aider Chat] Processing user message: ${userContent}`);
-  
   // Call Aider to make changes to the site
-  const aiderResult = await callAIder(siteId, userContent);
-  
+  const aiderResult = await callAIder(siteId, prompt);
+  log.result('Aider Chat', aiderResult.success);
   // Create assistant response based on Aider result
   let assistantContent: string;
   
   if (aiderResult.success) {
     // If Aider made changes, commit them locally for undo/redo functionality
-    if (aiderResult.codeDiff && aiderResult.codeDiff.trim()) {
-      console.log(`[Aider Chat] Aider made changes, committing locally for undo/redo`);
-      const commitResult = await commitLocalChanges(siteId, `AI change: ${userContent}`);
-      
-      if (commitResult.success) {
-        // Use Ollama to summarize the changes in a user-friendly way
-        console.log(`[Aider Chat] Getting code diff summary from Ollama`);
-        const summaryResult = await getCodeDiffSummary(aiderResult.codeDiff, userContent);
-        
-        if (summaryResult.success) {
-          assistantContent = `✅ Your changes have been saved!\n\n${summaryResult.content}\n\nYou can now use the undo/redo buttons to navigate through your changes, or click publish to make them live on your website.`;
-        } else {
-          assistantContent = `✅ Your changes have been saved!\n\nYour requested changes have been applied to the site.\n\nYou can now use the undo/redo buttons to navigate through your changes, or click publish to make them live on your website.`;
-        }
-      } else {
-        assistantContent = `**Changes applied but couldn't be saved** - Please try again.`;
-      }
+    if (aiderResult.codeDiff && aiderResult.codeDiff.trim()) {      
+      // Use OpenAI to summarize the changes in a user-friendly way
+      log.step('Aider Chat', 'Getting summary from code diff');
+      const summaryResult = await getCodeDiffSummary(originalUserMessage, aiderResult.codeDiff);
+      assistantContent = summaryResult.content ?? "Error generating summary";
     } else {
-      // Aider succeeded but didn't make file changes (e.g., answered a question)
-      assistantContent = aiderResult.output;
+      log.step('Aider Chat', 'Getting summary from original user request');
+      const summaryResult = await getCodeDiffSummary(originalUserMessage);
+      assistantContent = summaryResult.content ?? "Error generating summary";
     }
   } else {
     assistantContent = `❌ **Sorry, I couldn't make those changes**\n\nPlease try rephrasing your request or contact support if the issue continues.`;
@@ -134,103 +164,10 @@ async function processChatWithAider(messages: any[], siteId: string) {
   
   return {
     ...assistantMessage,
-    reloadIframe: aiderResult.success && !!(aiderResult.codeDiff && aiderResult.codeDiff.trim()) // Reload only if Aider succeeded and made actual changes
+    reloadIframe: aiderResult.success
   };
 }
 
-async function processGeneralQuestionWithOllama(messages: any[], siteId: string) {
-  // Extract the last user message
-  const lastUserMessage = [...messages].reverse().find((m: any) => m?.role === 'user' && m?.content);
-  
-  if (!lastUserMessage) {
-    throw new Error('No user message found');
-  }
-  
-  const userContent = extractTextFromMessageContent(lastUserMessage.content);
-  console.log(`[General Chat] Processing user question: ${userContent}`);
-  
-  // Load conversation history for context
-  const conversationHistory = await loadHistory(siteId);
-  console.log(`[General Chat] Loaded ${conversationHistory.length} conversation history messages`);
-  
-  // Get site files for context (only HTML files for general questions)
-  const allSiteFiles = await readSiteFiles(siteId);
-  const siteFiles = allSiteFiles.filter(f => f.path.toLowerCase().endsWith('.html'));
-  console.log(`[General Chat] Found ${siteFiles.length} HTML files for context (filtered from ${allSiteFiles.length} total files)`);
-  
-  // Create system message with site context
-  let systemMessage = `
-  You are a helpful AI assistant for LandingAI.
-  You help users understand their website.
-  You have access to the current website files and can answer questions about the website's content,structure, and functionality.
-  - Provide concise, helpful responses about the website.
-  - If the user asks about specific content, features, or functionality, refer to the actual website files when relevant.
-  - Keep responses brief and to the point.
-  - Avoid technical jargon.
-  Website files:
-  ${siteFiles.map(f => `File: ${f.path}\nContent:\n${f.content}\n---\n`).join('\n')}
-  `;
-
-  // Prepare messages for Ollama
-  const ollamaMessages: OllamaMessage[] = [];
-  
-  // Add recent conversation history (limit to last 5 messages to avoid token limits)
-  const recentHistory = conversationHistory.slice(-5);
-  if (recentHistory.length > 0) {
-    ollamaMessages.push(...recentHistory.map(msg => ({
-      role: msg.role as 'user' | 'assistant',
-      content: extractTextFromMessageContent(msg.content) || ''
-    })));
-    console.log(`[General Chat] Added ${recentHistory.length} conversation history messages`);
-  }
-  
-  // Add current user message
-  ollamaMessages.push({ role: 'user', content: userContent });
-  
-  console.log(`[General Chat] Sending ${ollamaMessages.length} messages to OpenAI`);
-  
-  try {
-      const result = await sendToOpenAI(systemMessage, ollamaMessages);
-    
-    if (!result.success) {
-      console.error('[General Chat] Failed to get response from OpenAI:', result.error);
-      throw new Error(result.error || 'Failed to get response from OpenAI');
-    }
-    
-    const assistantContent = result.content || 'I apologize, but I couldn\'t generate a response. Please try again.';
-    console.log(`[General Chat] Received response from OpenAI: ${assistantContent.substring(0, 100)}...`);
-    
-    // Create assistant message
-    const assistantMessage = {
-      role: 'assistant' as const,
-      content: assistantContent
-    };
-    
-    // Save the assistant response to chat history
-    await appendToHistory([assistantMessage], siteId);
-    
-    return {
-      ...assistantMessage,
-      reloadIframe: false // General questions don't require iframe reload
-    };
-    
-  } catch (error) {
-    console.error('[General Chat] Error processing with Ollama:', error);
-    
-    // Fallback response
-    const fallbackMessage = {
-      role: 'assistant' as const,
-      content: 'I apologize, but I\'m having trouble processing your question right now. Please try again or rephrase your question.'
-    };
-    
-    await appendToHistory([fallbackMessage], siteId);
-    
-    return {
-      ...fallbackMessage,
-      reloadIframe: false
-    };
-  }
-}
 
 // ===== ROUTE HANDLERS =====
 
@@ -240,201 +177,48 @@ export function setupRoutes(app: express.Application) {
     res.json({ status: 'ok' });
   });
 
-  // ===== OLLAMA ENDPOINTS (must come before /api/:siteId routes) =====
-
-  // Test Ollama connection and get available models
-  app.get('/api/ollama/models', async (req, res) => {
+  // Database health check
+  app.get('/health/database', async (req, res) => {
     try {
-      console.log('[Ollama] Getting available models');
-      
-      const result = await getAvailableModels();
-      
-      if (result.success) {
-        return res.json({
-          success: true,
-          models: result.models,
-          timestamp: new Date().toISOString()
-        });
-      } else {
-        return res.status(500).json({
-          success: false,
-          error: result.error || 'Failed to get models',
-          timestamp: new Date().toISOString()
-        });
-      }
-      
-    } catch (err) {
-      console.error('[Ollama] Error getting models:', err);
-      return res.status(500).json({ 
-        success: false,
-        error: 'Failed to get Ollama models',
-        details: err instanceof Error ? err.message : String(err)
+      const dbConnected = await checkDatabaseConnection();
+      res.json({ 
+        status: dbConnected ? 'ok' : 'error',
+        database: dbConnected ? 'connected' : 'disconnected'
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        status: 'error',
+        database: 'error',
+        error: error instanceof Error ? error.message : String(error)
       });
     }
   });
 
-  // Pull a model from Ollama
-  app.post('/api/ollama/pull', async (req, res) => {
+  // Site status endpoint
+  app.get('/api/:siteId/site-status', (req, res) => {
     try {
-      const { modelName } = req.body;
-      
-      if (!modelName) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'modelName is required' 
-        });
+      const siteId = String(req.params.siteId || '');
+      if (!siteId) {
+        return res.status(400).json({ error: 'siteId is required' });
       }
-      
-      console.log(`[Ollama] Pulling model: ${modelName}`);
-      
-      const result = await pullModel(modelName);
-      
-      if (result.success) {
-        return res.json({
-          success: true,
-          message: `Successfully pulled model: ${modelName}`,
-          timestamp: new Date().toISOString()
-        });
-      } else {
-        return res.status(500).json({
-          success: false,
-          error: result.error || 'Failed to pull model',
-          timestamp: new Date().toISOString()
-        });
-      }
-      
-    } catch (err) {
-      console.error('[Ollama] Error pulling model:', err);
-      return res.status(500).json({ 
-        success: false,
-        error: 'Failed to pull Ollama model',
-        details: err instanceof Error ? err.message : String(err)
+
+      const status = getSiteStatus(siteId);
+      return res.json({ 
+        siteId,
+        status,
+        timestamp: new Date().toISOString()
       });
+    } catch (err) {
+      log.error('Site Status', err);
+      return res.status(500).json({ error: 'Failed to get site status' });
     }
   });
 
-  // Send messages to Ollama
-  app.post('/api/ollama/chat', async (req, res) => {
-    try {
-      const { systemMessage, messages, model, baseUrl } = req.body;
-      
-      if (!systemMessage || !messages || !Array.isArray(messages)) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'systemMessage and messages array are required' 
-        });
-      }
-      
-      // Validate message format
-      const validMessages: OllamaMessage[] = messages.map((msg: any) => {
-        if (!msg.role || !msg.content) {
-          throw new Error('Each message must have role and content');
-        }
-        if (!['system', 'user', 'assistant'].includes(msg.role)) {
-          throw new Error('Message role must be system, user, or assistant');
-        }
-        return {
-          role: msg.role as 'system' | 'user' | 'assistant',
-          content: String(msg.content)
-        };
-      });
-      
-      console.log(`[Ollama] Sending ${validMessages.length} messages to Ollama`);
-      
-      const config = {
-        ...(model && { model }),
-        ...(baseUrl && { baseUrl })
-      };
-      
-      const result = await sendToOpenAI(systemMessage, validMessages, config);
-      
-      if (result.success) {
-        return res.json({
-          success: true,
-          content: result.content,
-          model: result.model,
-          timestamp: result.timestamp
-        });
-      } else {
-        return res.status(500).json({
-          success: false,
-          error: result.error || 'Failed to get response from Ollama',
-          timestamp: result.timestamp
-        });
-      }
-      
-    } catch (err) {
-      console.error('[Ollama] Error in chat:', err);
-      return res.status(500).json({ 
-        success: false,
-        error: 'Failed to process Ollama chat',
-        details: err instanceof Error ? err.message : String(err)
-      });
-    }
-  });
 
-  // Test Ollama with a simple message
-  app.post('/api/ollama/test', async (req, res) => {
-    try {
-      const { message, model } = req.body;
-      
-      if (!message) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'message is required' 
-        });
-      }
-      
-      console.log(`[Ollama] Testing with message: ${message}`);
-      
-      const systemMessage = "You are a helpful AI assistant. Respond concisely and helpfully.";
-      const messages: OllamaMessage[] = [
-        { role: 'user', content: String(message) }
-      ];
-      
-      const config = model ? { model } : undefined;
-      const result = await sendToOpenAI(systemMessage, messages, config);
-      
-      if (result.success) {
-        return res.json({
-          success: true,
-          response: result.content,
-          model: result.model,
-          timestamp: result.timestamp
-        });
-      } else {
-        return res.status(500).json({
-          success: false,
-          error: result.error || 'Failed to get response from Ollama',
-          timestamp: result.timestamp
-        });
-      }
-      
-    } catch (err) {
-      console.error('[Ollama] Error in test:', err);
-      return res.status(500).json({ 
-        success: false,
-        error: 'Failed to test Ollama',
-        details: err instanceof Error ? err.message : String(err)
-      });
-    }
-  });
-
-  // Serve the example_page folder statically (legacy example)
-  const examplePageDir = path.resolve(process.cwd(), '../../example_page');
-  app.use('/sites/example', (req, res, next) => {
-    // Add CORS headers for static files
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-    res.header('Access-Control-Expose-Headers', 'Content-Length, Content-Type, Last-Modified, ETag');
-    next();
-  }, express.static(examplePageDir, { index: 'index.html' }));
-
-  // Dynamically serve per-site static content from <repo_root>/<siteId>/site
-  app.use('/sites/:siteId', (req, res, next) => {
+  // Dynamically serve per-site static content from the configured sites directory
+  app.use('/sites/:siteId', async (req, res, next) => {
     const siteId = String(req.params.siteId || '');
-    if (!siteId || siteId === 'example') return next();
+    if (!siteId) return next();
     
     // Add CORS headers for static files
     res.header('Access-Control-Allow-Origin', '*');
@@ -442,8 +226,14 @@ export function setupRoutes(app: express.Application) {
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
     res.header('Access-Control-Expose-Headers', 'Content-Length, Content-Type, Last-Modified, ETag');
     
-    const siteDir = getSiteDir(siteId);
-    return express.static(siteDir, { index: 'index.html' })(req, res, next);
+    try {
+      // Serve directly from the siteId directory in the configured sites path
+      const siteDir = await getSiteDirAsync(siteId);
+      return express.static(siteDir, { index: 'index.html' })(req, res, next);
+    } catch (error) {
+      log.error('Static File Serving', error);
+      return res.status(500).json({ error: 'Failed to serve static files' });
+    }
   });
 
   // Return text-based files for a site (used to send source files to AI)
@@ -455,7 +245,7 @@ export function setupRoutes(app: express.Application) {
       const files = await readSiteFiles(siteId);
       return res.json({ files });
     } catch (err) {
-      console.error('site-files error', err);
+      log.error('Site Files', err);
       return res.status(500).json({ error: 'Failed to read site files' });
     }
   });
@@ -472,28 +262,8 @@ export function setupRoutes(app: express.Application) {
       const result = await applyFilesToSite(siteId, files);
       return res.json(result);
     } catch (err) {
-      console.error('apply-files error', err);
+      log.error('Apply Files', err);
       return res.status(500).json({ error: 'Failed to apply files' });
-    }
-  });
-
-  app.get('/api/chat/history', async (_req, res) => {
-    try {
-      const history = await loadHistory();
-      res.json({ history });
-    } catch (err) {
-      console.error('History route error', err);
-      res.status(500).json({ error: 'Failed to load history' });
-    }
-  });
-
-  app.delete('/api/chat/history', async (_req, res) => {
-    try {
-      await deleteHistory();
-      res.json({ ok: true });
-    } catch (err) {
-      console.error('Delete history error', err);
-      res.status(500).json({ error: 'Failed to delete history' });
     }
   });
 
@@ -502,9 +272,16 @@ export function setupRoutes(app: express.Application) {
     try {
       const siteId = String(req.params.siteId || '');
       const history = await loadHistory(siteId);
-      res.json({ history });
+      
+      // Clean [Image: ...] references from text messages while keeping image data
+      const cleanedHistory = history.map((message: any) => ({
+        ...message,
+        content: cleanImageReferencesFromText(message.content)
+      }));
+      
+      res.json({ history: cleanedHistory });
     } catch (err) {
-      console.error('History route error', err);
+      log.error('History Route', err);
       res.status(500).json({ error: 'Failed to load history' });
     }
   });
@@ -515,124 +292,108 @@ export function setupRoutes(app: express.Application) {
       await deleteHistory(siteId);
       res.json({ ok: true });
     } catch (err) {
-      console.error('Delete site history error', err);
+      log.error('Delete History', err);
       res.status(500).json({ error: 'Failed to delete history' });
     }
   });
 
-  // Per-site chat endpoint with Ollama decision layer
+  // Per-site chat endpoint with OpenAI decision layer
   app.post('/api/:siteId/chat', async (req, res) => {
+    const siteId = String(req.params.siteId || '');
+    log.request(siteId, 'Chat Request');
+    
     try {
-      const siteId = String(req.params.siteId || '');
       const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
+      log.info('Site Chat', `${messages.length} messages`);
+      
       if (messages.length === 0) {
+        log.error('Site Chat', 'No messages provided');
+        setSiteStatus(siteId, 'READY');
         return res.status(400).json({ error: 'messages array is required' });
       }
 
+      // Mark site as UNDER_DEV when chat request starts
+      setSiteStatus(siteId, 'UNDER_DEV');
+
       const lastUser = [...messages].reverse().find((m: any) => m?.role === 'user' && m?.content);
       if (!lastUser) {
+        setSiteStatus(siteId, 'READY');
         return res.status(400).json({ error: 'No user message found' });
       }
 
-      const userMessage = extractTextFromMessageContent(lastUser.content);
-      console.log(`[Site Chat] Processing user message: ${userMessage}`);
+      log.step('Site Chat', 'Processing user message');
+      
+      // Append image URL to text for history storage (keep URLs in history)
+      const contentForHistory = appendImageUrlToText(lastUser.content);
+      lastUser.content = contentForHistory;
 
       // Save the user message to history
       appendToHistory([{ role: 'user', content: lastUser.content }], siteId).catch(err =>
-        console.error('Failed to append user message to history', err)
+        log.error('Append History', err)
       );
 
-      // Step 1: Ask Ollama to determine if this is a coding task
-      console.log(`[Site Chat] Step 1: Determining if message requires coding work`);
-      console.log(`[Site Chat] User message: ${userMessage}`);
+      // Step 1: Ask OpenAI to determine if this is a coding task
+      log.step('Site Chat', 'Determining if coding required');
       
-      const decisionSystemMessage = `You are an AI assistant for LandingAI. Determine if the user's request is a coding task or a general question. 
-
-      You must respond with ONLY a JSON object in this exact format:
-      {"shouldCode": true}
-
-      Set shouldCode to true for ANY request that involves:
-      - Adding, removing, or modifying elements (buttons, text, images, etc.)
-      - Changing colors, styles, or layout
-      - Creating new features or functionality
-      - Editing HTML, CSS, or JavaScript
-      - Making visual changes to the website
-
-      Set shouldCode to false ONLY for:
-      - Questions about existing content
-      - Asking for explanations
-      - General information requests
-
-      Do not include any other text or explanation.`;
+      // Read decision system message from file
+      const decisionSystemMessagePath = path.resolve(process.cwd(), 'decision_system_message.txt');
+      let decisionSystemMessage = await fs.readFile(decisionSystemMessagePath, 'utf8');
+      
+      // Replace SITE_ID_PLACEHOLDER with actual site ID
+      decisionSystemMessage = decisionSystemMessage.replace(/SITE_ID_PLACEHOLDER/g, siteId);
+      
+      log.step('Site Chat', 'Loaded decision system message from file');
                 
-      const decisionMessages: OllamaMessage[] = [
-        { role: 'user', content: userMessage }
-      ];
+      // Load chat history and combine with current messages for full context
+      const chatHistory = await loadHistory(siteId);
+      log.info('Site Chat', `Loaded ${chatHistory.length} history messages`);
+      
+      // Combine historical messages with current messages
+      const allMessages = [...chatHistory, ...messages];
+      log.info('Site Chat', `Combined ${chatHistory.length + messages.length} total messages`);
+      // Convert all messages to OpenAI message format for context
+      const decisionMessages: OpenAIMessage[] = await Promise.all(allMessages.map(async (msg: any) => ({
+        role: msg.role,
+        content: typeof msg.content === 'string' ? msg.content : await processMessageWithImages(msg.content)
+      })));
 
-      console.log(`[Site Chat] Calling sendToOpenAI with system message and user message`);
+      log.step('Site Chat', 'Calling OpenAI for decision');
       const decisionResult = await sendToOpenAI(decisionSystemMessage, decisionMessages);
-      console.log(`[Site Chat] Decision result:`, decisionResult);
+      log.result('Site Chat', decisionResult.success, 'OpenAI decision');
       
       if (!decisionResult.success) {
-        console.error('[Site Chat] Failed to get decision from OpenAI:', decisionResult.error);
+        log.error('Site Chat', 'OpenAI decision failed');
         const assistantMessage = { 
           role: 'assistant', 
           content: 'Sorry, I encountered an issue processing your request. Please try again.' 
         };
+        setSiteStatus(siteId, 'READY');
         return res.json({ message: assistantMessage });
       }
 
-      // Parse the decision
+      // Use the should_code field from the response
       let shouldCode = false;
-      try {
-        let content = decisionResult.content || '{}';
-        console.log(`[Site Chat] Raw decision content: ${content}`);
-        
-        // Remove markdown code blocks if present
-        if (content.includes('```json')) {
-          content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        }
-        
-        // Try to extract JSON from the content using regex
-        const jsonMatch = content.match(/\{[\s\S]*"shouldCode"[\s\S]*\}/);
-        if (jsonMatch) {
-          content = jsonMatch[0];
-        } else {
-          // Try a simpler approach - look for any JSON-like structure
-          const simpleJsonMatch = content.match(/\{[^}]*"shouldCode"[^}]*\}/);
-          if (simpleJsonMatch) {
-            content = simpleJsonMatch[0];
-          }
-        }
-        
-        // Clean up any extra text around the JSON
-        content = content.trim();
-        
-        console.log(`[Site Chat] Cleaned content for parsing: ${content}`);
-        
-        const decisionJson = JSON.parse(content);
-        shouldCode = decisionJson.shouldCode === true;
-        console.log(`[Site Chat] Decision: shouldCode = ${shouldCode} (parsed JSON: ${JSON.stringify(decisionJson)})`);
-      } catch (parseError) {
-        console.error('[Site Chat] Failed to parse decision JSON:', decisionResult.content);
-        console.error('[Site Chat] Parse error:', parseError);
-        // Default to coding if we can't parse the decision
-        shouldCode = true;
+      if (decisionResult.should_code !== undefined) {
+        shouldCode = decisionResult.should_code;
+        log.info('Site Chat', `Decision: ${shouldCode ? 'coding' : 'general'}`);
       }
 
       // Step 2: Route based on decision
       if (shouldCode) {
-        console.log(`[Site Chat] Step 2: Routing to Aider for coding work`);
+        log.step('Site Chat', 'Routing to Aider');
+        if (decisionResult.prompt_for_code) {
+          log.step('Site Chat', 'Using prompt_for_code');
+        }
         
         try {
-          const result = await processChatWithAider(messages, siteId);
+          const result = await processChatWithAider(messages, siteId, decisionResult.prompt_for_code);
+          setSiteStatus(siteId, 'READY');
           return res.json({ 
             message: result,
             reloadIframe: result.reloadIframe 
           });
         } catch (err) {
-          console.error('Aider Chat error:', err);
-          console.error('Error details:', JSON.stringify(err, null, 2));
+          log.error('Aider Chat', err);
           
           // Provide more specific error messages
           let errorMessage = 'The AI service is temporarily unavailable. Please try again shortly.';
@@ -648,42 +409,34 @@ export function setupRoutes(app: express.Application) {
           }
           
           const assistantMessage = { role: 'assistant', content: errorMessage };
+          setSiteStatus(siteId, 'READY');
           return res.json({ message: assistantMessage, error: 'Aider Chat error', details: err });
         }
       } else {
-        console.log(`[Site Chat] Step 2: Routing to Ollama for general question`);
+        log.step('Site Chat', 'Returning direct response');
         
-        try {
-          const result = await processGeneralQuestionWithOllama(messages, siteId);
-          return res.json({ 
-            message: result,
-            reloadIframe: result.reloadIframe 
-          });
-        } catch (err) {
-          console.error('General Chat error:', err);
-          console.error('Error details:', JSON.stringify(err, null, 2));
-          
-          // Provide more specific error messages
-          let errorMessage = 'I apologize, but I\'m having trouble processing your question right now. Please try again.';
-          if (err && typeof err === 'object' && 'message' in err) {
-            const errMsg = String(err.message);
-            if (errMsg.includes('No user message found')) {
-              errorMessage = 'No user message found in the request.';
-            } else if (errMsg.includes('Failed to get response from Ollama')) {
-              errorMessage = 'The AI service is temporarily unavailable. Please try again shortly.';
-            }
-          }
-          
-          const assistantMessage = { role: 'assistant', content: errorMessage };
-          return res.json({ message: assistantMessage, error: 'General Chat error', details: err });
-        }
+        // Return the response_for_message directly to the user
+        const assistantMessage = { 
+          role: 'assistant' as const, 
+          content: decisionResult.response_for_message || 'I apologize, but I couldn\'t process your request. Please try again.'
+        };
+        
+        // Save the assistant response to chat history
+        await appendToHistory([assistantMessage], siteId);
+        
+        setSiteStatus(siteId, 'READY');
+        return res.json({ 
+          message: assistantMessage,
+          reloadIframe: false // General questions don't require iframe reload
+        });
       }
 
     } catch (err) {
-      console.error('Chat route error:', err);
+      log.error('Chat Route', err);
       const assistantMessage = { role: 'assistant', content: 'The AI service is temporarily unavailable. Please try again shortly.' };
+      setSiteStatus(siteId, 'READY');
       return res.json({ message: assistantMessage, error: 'Internal server error' });
-    }
+    }    
   });
 
   // Undo endpoint
@@ -697,7 +450,11 @@ export function setupRoutes(app: express.Application) {
         });
       }
 
-      console.log(`[Undo] Starting undo for site: ${siteId}`);
+      log.request(siteId, 'Undo');
+      
+      // Kill the aider process for this site before undoing
+      terminateAiderProcess(siteId);
+      log.info('Undo', `Terminated aider process for site ${siteId}`);
       
       const result = await undoLastCommit(siteId);
       
@@ -717,7 +474,7 @@ export function setupRoutes(app: express.Application) {
       }
       
     } catch (err) {
-      console.error('[Undo] Error:', err);
+      log.error('Undo', err);
       return res.status(500).json({ 
         success: false,
         error: 'Failed to undo changes',
@@ -737,11 +494,18 @@ export function setupRoutes(app: express.Application) {
         });
       }
 
-      console.log(`[Start Over] Starting pull for site: ${siteId}`);
-      
+      // Kill the aider process for this site before starting over
+      terminateAiderProcess(siteId);
+      log.info('Start Over', `Terminated aider process for site ${siteId}`);       
+
+      log.request(siteId, 'Start Over');  
       const result = await startOverFromGitHub(siteId);
       
       if (result.success) {
+        // Delete chat history for the site
+        await deleteHistory(siteId);
+        log.info('Start Over', `Deleted chat history for site ${siteId}`);
+
         return res.json({
           success: true,
           message: result.message,
@@ -757,7 +521,7 @@ export function setupRoutes(app: express.Application) {
       }
       
     } catch (err) {
-      console.error('[Start Over] Error:', err);
+      log.error('Start Over', err);
       return res.status(500).json({ 
         success: false,
         error: 'Failed to start over',
@@ -777,7 +541,11 @@ export function setupRoutes(app: express.Application) {
         });
       }
 
-      console.log(`[Redo] Starting redo for site: ${siteId}`);
+      log.request(siteId, 'Redo');
+      
+      // Kill the aider process for this site before redoing
+      terminateAiderProcess(siteId);
+      log.info('Redo', `Terminated aider process for site ${siteId}`);
       
       const result = await redoLastCommit(siteId);
       
@@ -797,7 +565,7 @@ export function setupRoutes(app: express.Application) {
       }
       
     } catch (err) {
-      console.error('[Redo] Error:', err);
+      log.error('Redo', err);
       return res.status(500).json({ 
         success: false,
         error: 'Failed to redo changes',
@@ -817,7 +585,7 @@ export function setupRoutes(app: express.Application) {
         });
       }
 
-      console.log(`[Publish] Starting publish for site: ${siteId}`);
+      log.request(siteId, 'Publish');
       
       const result = await pushToGitHub(siteId);
       
@@ -838,7 +606,7 @@ export function setupRoutes(app: express.Application) {
       }
       
     } catch (err) {
-      console.error('[Publish] Error:', err);
+      log.error('Publish', err);
       return res.status(500).json({ 
         success: false,
         error: 'Failed to publish changes',
@@ -858,7 +626,7 @@ export function setupRoutes(app: express.Application) {
         });
       }
       
-      console.log(`[Test Aider] Testing with siteId: ${siteId}, message: ${userMessage}`);
+      log.request(siteId, 'Test Aider');
       
       const result = await callAIder(siteId, userMessage);
       
@@ -870,12 +638,305 @@ export function setupRoutes(app: express.Application) {
       });
       
     } catch (err) {
-      console.error('[Test Aider] Error:', err);
+      log.error('Test Aider', err);
       return res.status(500).json({ 
         error: 'Failed to test Aider',
         details: err instanceof Error ? err.message : String(err)
       });
     }
   });
+
+  // ===== AIDER PROCESS MONITORING =====
+  
+  // Get aider process status
+  app.get('/api/aider/status', (req, res) => {
+    try {
+      const siteId = req.query.siteId as string;
+      const status = getAiderProcessStatus(siteId);
+      
+      return res.json({
+        success: true,
+        data: status,
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (err) {
+      log.error('Get Aider Status', err);
+      return res.status(500).json({ 
+        error: 'Failed to get aider status',
+        details: err instanceof Error ? err.message : String(err)
+      });
+    }
+  });
+
+  // Terminate aider process for a specific site
+  app.post('/api/aider/terminate/:siteId', (req, res) => {
+    try {
+      const { siteId } = req.params;
+      
+      if (!siteId) {
+        return res.status(400).json({ 
+          error: 'Site ID is required' 
+        });
+      }
+      
+      terminateAiderProcess(siteId);
+      
+      return res.json({
+        success: true,
+        message: `Aider process terminated for site ${siteId}`,
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (err) {
+      log.error('Terminate Aider Process', err);
+      return res.status(500).json({ 
+        error: 'Failed to terminate aider process',
+        details: err instanceof Error ? err.message : String(err)
+      });
+    }
+  });
+
+  // Terminate all aider processes
+  app.post('/api/aider/terminate-all', (req, res) => {
+    try {
+      terminateAllAiderProcesses();
+      
+      return res.json({
+        success: true,
+        message: 'All aider processes terminated',
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (err) {
+      log.error('Terminate All Aider Processes', err);
+      return res.status(500).json({ 
+        error: 'Failed to terminate all aider processes',
+        details: err instanceof Error ? err.message : String(err)
+      });
+    }
+  });
+
+  // ===== GIFT CARD ENDPOINTS =====
+
+  // Get all gift cards for a site
+  app.get('/api/:siteId/gift-cards', async (req, res) => {
+    try {
+      const siteId = String(req.params.siteId || '');
+      if (!siteId) {
+        return res.status(400).json({
+          success: false,
+          error: 'siteId is required'
+        });
+      }
+
+      const result = await listGiftCards(siteId);
+      
+      if (result.success) {
+        return res.json({
+          success: true,
+          data: result.data,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        return res.status(500).json({
+          success: false,
+          error: result.error
+        });
+      }
+    } catch (err) {
+      log.error('Get All Gift Cards', err);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to retrieve gift cards',
+        details: err instanceof Error ? err.message : String(err)
+      });
+    }
+  });
+
+  // Get gift card by ID for a site
+  app.get('/api/:siteId/gift-cards/:id', async (req, res) => {
+    try {
+      const siteId = String(req.params.siteId || '');
+      const id = parseInt(req.params.id);
+      
+      if (!siteId) {
+        return res.status(400).json({
+          success: false,
+          error: 'siteId is required'
+        });
+      }
+      
+      if (isNaN(id)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid gift card ID'
+        });
+      }
+      
+      const result = await getGiftCard(siteId, id);
+      
+      if (result.success) {
+        return res.json({
+          success: true,
+          data: result.data,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        return res.status(404).json({
+          success: false,
+          error: result.error
+        });
+      }
+    } catch (err) {
+      log.error('Get Gift Card', err);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to retrieve gift card',
+        details: err instanceof Error ? err.message : String(err)
+      });
+    }
+  });
+
+  // Create gift card for a site
+  app.post('/api/:siteId/gift-cards', async (req, res) => {
+    try {
+      const siteId = String(req.params.siteId || '');
+      const { name, description, price } = req.body;
+      
+      if (!siteId) {
+        return res.status(400).json({
+          success: false,
+          error: 'siteId is required'
+        });
+      }
+      
+      if (!name || price === undefined) {
+        return res.status(400).json({
+          success: false,
+          error: 'Name and price are required'
+        });
+      }
+      
+      const result = await addGiftCard(siteId, { name, description, price });
+      
+      if (result.success) {
+        return res.status(201).json({
+          success: true,
+          data: result.data,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        return res.status(400).json({
+          success: false,
+          error: result.error
+        });
+      }
+    } catch (err) {
+      log.error('Create Gift Card', err);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to create gift card',
+        details: err instanceof Error ? err.message : String(err)
+      });
+    }
+  });
+
+  // Update gift card for a site
+  app.put('/api/:siteId/gift-cards/:id', async (req, res) => {
+    try {
+      const siteId = String(req.params.siteId || '');
+      const id = parseInt(req.params.id);
+      const { name, description, price } = req.body;
+      
+      if (!siteId) {
+        return res.status(400).json({
+          success: false,
+          error: 'siteId is required'
+        });
+      }
+      
+      if (isNaN(id)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid gift card ID'
+        });
+      }
+      
+      if (!name || price === undefined) {
+        return res.status(400).json({
+          success: false,
+          error: 'Name and price are required'
+        });
+      }
+      
+      const result = await editGiftCard(siteId, { id, name, description, price });
+      
+      if (result.success) {
+        return res.json({
+          success: true,
+          data: result.data,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        return res.status(404).json({
+          success: false,
+          error: result.error
+        });
+      }
+    } catch (err) {
+      log.error('Update Gift Card', err);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to update gift card',
+        details: err instanceof Error ? err.message : String(err)
+      });
+    }
+  });
+
+  // Delete gift card for a site
+  app.delete('/api/:siteId/gift-cards/:id', async (req, res) => {
+    try {
+      const siteId = String(req.params.siteId || '');
+      const id = parseInt(req.params.id);
+      
+      if (!siteId) {
+        return res.status(400).json({
+          success: false,
+          error: 'siteId is required'
+        });
+      }
+      
+      if (isNaN(id)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid gift card ID'
+        });
+      }
+      
+      const result = await removeGiftCard(siteId, id);
+      
+      if (result.success) {
+        return res.json({
+          success: true,
+          message: 'Gift card deleted successfully',
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        return res.status(404).json({
+          success: false,
+          error: result.error
+        });
+      }
+    } catch (err) {
+      log.error('Delete Gift Card', err);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to delete gift card',
+        details: err instanceof Error ? err.message : String(err)
+      });
+    }
+  });
+
 
 }

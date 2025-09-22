@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { setupRoutes } from './routes/endpoints';
+import { initializeDatabase, checkDatabaseConnection } from './utils/database';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -24,10 +25,34 @@ app.use(express.json({ limit: '15mb' }));
 
 const port = process.env.PORT || 3001;
 
-// Setup all routes
-setupRoutes(app);
+// Initialize database and start server
+async function startServer() {
+  try {
+    // Initialize database
+    console.log('Initializing database...');
+    await initializeDatabase();
+    console.log('Database initialized successfully');
+    
+    // Check database connection
+    const dbConnected = await checkDatabaseConnection();
+    if (dbConnected) {
+      console.log('Database connection verified');
+    } else {
+      console.warn('Database connection failed, using file system fallback');
+    }
+    
+    // Setup all routes
+    setupRoutes(app);
+    
+    // Start the server
+    app.listen(port, () => {
+      console.log(`API listening on http://localhost:${port}`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
 
 // Start the server
-app.listen(port, () => {
-  console.log(`API listening on http://localhost:${port}`);
-});
+startServer();
