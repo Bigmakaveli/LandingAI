@@ -130,4 +130,10 @@ tmp/
 temp/
 
 # Project-specific folders to exclude
-.aider*landingai_deployment_*.tar.gz
+.aider*
+landingai_deployment_*.tar.gz
+
+# API Keys and sensitive configuration files
+api-keys.txt
+*.keys
+secrets.txt

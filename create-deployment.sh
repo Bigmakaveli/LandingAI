@@ -35,6 +35,7 @@ cp package-lock.json "$TEMP_DIR/"
 cp tsconfig.json "$TEMP_DIR/"
 cp Dockerfile "$TEMP_DIR/"
 cp README.md "$TEMP_DIR/"
+cp api-keys.template.txt "$TEMP_DIR/"
 
 # Copy backend files
 echo "🔧 Copying backend files..."
@@ -126,10 +127,22 @@ docker run -p 3000:3000 -p 3001:3001 landingai
 
 ## Environment Variables
 
-Make sure to set up the following environment variables:
-- Database connection strings
-- API keys
-- Any other configuration specific to your environment
+1. **Copy the API keys template:**
+   ```bash
+   cp api-keys.template.txt api-keys.txt
+   ```
+
+2. **Edit api-keys.txt with your actual values:**
+   - Set your OpenAI API key
+   - Set your database connection string
+   - Set your sites directory path
+
+3. **Alternative: Set environment variables:**
+   ```bash
+   export OPENAI_API_KEY="your-api-key"
+   export DATABASE_URL="your-database-url"
+   export SITES_PATH="/path/to/sites"
+   ```
 
 ## File Structure
 
